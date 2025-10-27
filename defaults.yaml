@@ -1,0 +1,33 @@
+# authoritative defaults (stable; runs won’t blow up by default)
+
+Omega: 1.0
+q: 1.5
+sig_0: 1.0
+tstop: 0.1
+D_0: 1.0e-5
+nu_0: 1.0e-5
+beta_diff: 0
+beta_visc: 0
+nu_g: 1.0e-3
+eps: 1.0
+
+# grid / domain
+Lx: 0.2
+Nx: 128
+exact_fit:
+  enable: false
+  K_target: 100.0
+  harmonics: 2
+
+stop_time: 40.0
+max_dt: 1.0e-2
+min_dt: 5.0e-4
+save_stride: 50
+log_stride: 50
+
+# options / solver backend toggle
+enable_gas: true
+enable_dedalus_evp: true
+# choose IVP backend later (either "native" or "dedalus")
+solver:
+  backend: native

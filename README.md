@@ -1,8 +1,24 @@
-# diff-instability (1D dust–gas) — clean stack
+# Diffusive Instability (dust–gas) — clean numerical stack
 
-This repo starts with a dry scaffold: configs, grid, I/O, and a no-op runner that writes a single checkpoint. No physics yet. The goal is to ensure the plumbing is correct before we add equations.
+One goal: a fast, clear, reproducible 1D stack for the diffusive instability model
+(axes: EVP, linear time-domain, nonlinear saturation), with switchable solvers:
+our native 1D pseudo-spectral IMEX **and** a Dedalus backend.
 
-## Quick start
+## status
+
+- ✅ Repo scaffolded: config → grid → streaming I/O → runners
+- ✅ Tests pass (`pytest`)
+- ✅ Dry-run works (writes manifest, metrics, one checkpoint)
+- ✅ EVP (direct 4×4) implemented with CLI sweep
+- 🚧 Linear time-domain harness (IMEX) — next step
+- 🚧 Nonlinear core + convergence metrics — after linear harness
+- 🚧 Paper figure scripts — after linear/nonlinear are in
+
+## install (recommended: venv)
+
 ```bash
-pytest -q
-python scripts/run_linear.py --config experiments/baseline.yaml --outdir runs/linear --dry-run
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -U pip
+pip install -e .  # editable install
+pip install scipy matplotlib pytest
