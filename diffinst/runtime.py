@@ -7,7 +7,7 @@ from .grid import Grid1D
 from .fields import State
 from .io_utils import StreamWriter
 from typing import Optional, Tuple
-from .solvers.native import LinearNative, LinearRunArgs
+from .solvers.native import LinearNative, LinearRunArgs, NonlinearNative, NonlinearRunArgs
 
 def _build_grid_with_exact_fit(cfg: Config) -> Grid1D:
     grid = Grid1D(cfg.Nx, cfg.Lx)
@@ -57,7 +57,7 @@ class Runner:
 
 def run_linear_native(cfg: Config,
                       outdir: str | Path,
-                      tstop: float,
+                      stop_time: float,
                       dt: float,
                       save_stride: int,
                       k_target: Optional[float] = None,
@@ -65,12 +65,13 @@ def run_linear_native(cfg: Config,
                       seed: Optional[int] = None,
                       amp_is_physical: bool = False,
                       amp_metric: str = "max",
+                      init_state: dict | None = None,
                       ) -> dict:
     # shared setup
     grid, state_unused, writer = prepare_run(cfg, outdir, kind="linear_native", backend="native")
 
     args = LinearRunArgs(
-        tstop=tstop,
+        stop_time=stop_time,
         dt=dt,
         save_stride=save_stride,
         k_target=k_target,
@@ -78,6 +79,38 @@ def run_linear_native(cfg: Config,
         seed=seed,
         amp_is_physical=amp_is_physical,
         amp_metric=amp_metric,
+        init_state=init_state,
     )
     solver = LinearNative(cfg, Path(outdir), args, grid=grid, writer=writer)
+    return solver.run()
+
+def run_nonlinear_native(cfg: Config,
+                         outdir: str | Path,
+                         stop_time: float,
+                         dt: float,
+                         save_stride: int,
+                         init_k: int = 1,
+                         amp: float = 1e-3,
+                         seed: Optional[int] = None,
+                         seed_mode: str = "cos",         # 
+                         k_phys: Optional[float] = None, # 
+                         amp_is_physical: bool = True,   # 
+                         amp_metric: str = "max",        # 
+                         init_state: dict | None = None,
+                         ) -> dict:
+    grid, _state_unused, writer = prepare_run(cfg, outdir, kind="nonlinear_native", backend="native")
+    args = NonlinearRunArgs(
+        stop_time=stop_time,
+        dt=dt,
+        save_stride=save_stride,
+        amp=amp,
+        seed=seed,
+        k0=init_k,
+        seed_mode=seed_mode,
+        k_phys=k_phys,
+        amp_is_physical=amp_is_physical,
+        amp_metric=amp_metric,
+        init_state=init_state
+    )
+    solver = NonlinearNative(cfg, Path(outdir), args, grid=grid, writer=writer)
     return solver.run()

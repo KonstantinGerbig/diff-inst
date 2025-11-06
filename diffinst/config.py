@@ -9,7 +9,7 @@ class Config:
     Omega: float = 1.0
     q: float = 1.5
     sig_0: float = 1.0
-    tstop: float = 0.1
+    ts: float = 0.1
     D_0: float = 1e-5
     nu_0: float = 1e-5
     beta_diff: float = 0
@@ -50,6 +50,6 @@ def _validate(cfg: Config) -> None:
     assert cfg.Nx > 0 and int(cfg.Nx) == cfg.Nx
     assert cfg.Lx > 0.0
     assert cfg.max_dt >= cfg.min_dt > 0.0
-    for val in [cfg.Omega, cfg.sig_0, cfg.tstop, cfg.D_0, cfg.nu_0, cfg.nu_g, cfg.eps]:
+    for val in [cfg.Omega, cfg.sig_0, cfg.ts, cfg.D_0, cfg.nu_0, cfg.nu_g, cfg.eps]:
         assert isinstance(val, (int, float))
     assert cfg.solver["backend"] in ("native", "dedalus")

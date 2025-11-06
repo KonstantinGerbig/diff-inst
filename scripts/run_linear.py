@@ -1,9 +1,11 @@
 # scripts/run_linear.py
 import argparse
 import json
+import numpy as np
 from pathlib import Path
 from diffinst import Config
 from diffinst.runtime import run_linear_native
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -14,7 +16,7 @@ def main():
     # linear mode
     ap.add_argument("--mode", choices=["linear"], default=None,
                     help="Select run mode. 'linear' uses the native spectral harness.")
-    ap.add_argument("--tstop", type=float, default=10.0)
+    ap.add_argument("--stop_time", type=float, default=10.0)
     ap.add_argument("--dt", type=float, default=1e-2)
     ap.add_argument("--save-stride", type=int, default=50)
     ap.add_argument("--k", type=float, default=None,
@@ -26,10 +28,17 @@ def main():
     ap.add_argument("--amp-metric", choices=["max","rms"], default="max",
                     help="Physical amplitude metric when --amp-physical is used.")
     ap.add_argument("--seed", type=int, default=None)
+    ap.add_argument("--init-from", type=str, default=None,
+                help="Path to .npz with arrays Sigma,vx,vy,uy to use as initial state.")
 
     args = ap.parse_args()
     cfg = Config.from_yaml(args.config)
     outdir = Path(args.outdir); outdir.mkdir(parents=True, exist_ok=True)
+
+    init_state = None
+    if args.init_from:
+        Z = np.load(args.init_from)
+        init_state = {k: Z[k] for k in ["Sigma","vx","vy","uy"]}
 
     # simple dry-run (existing behavior)
     if args.dry_run and args.mode is None:
@@ -43,7 +52,6 @@ def main():
         }, indent=2))
         with (outdir / "metrics.jsonl").open("a") as f:
             f.write(json.dumps({"t": 0.0, "note": "dry_run"}) + "\n")
-        import numpy as np
         np.savez_compressed(outdir / "checkpoints" / "chk_000000.npz",
                             t=0.0, x=np.linspace(-0.5*cfg.Lx, 0.5*cfg.Lx, int(cfg.Nx), endpoint=False))
         print("[dry] wrote one checkpoint; backend = native | Lx =", cfg.Lx)
@@ -54,7 +62,7 @@ def main():
         info = run_linear_native(
             cfg=cfg,
             outdir=outdir,
-            tstop=args.tstop,
+            stop_time=args.stop_time,
             dt=args.dt,
             save_stride=args.save_stride,
             k_target=args.k,
@@ -62,6 +70,7 @@ def main():
             seed=args.seed,
             amp_is_physical=bool(args.amp_physical),
             amp_metric=str(args.amp_metric),
+            init_state=init_state,
         )
         print("[linear] done:", info)
         return

@@ -11,7 +11,7 @@ def L_of_k(cfg: Config, k: float) -> np.ndarray:
     ik = 1j * k
     Om = float(cfg.Omega)
     q  = float(cfg.q)
-    tS = float(cfg.tstop)
+    tS = float(cfg.ts)
     D0 = float(cfg.D_0)
     nu = float(cfg.nu_0)
     betad = float(cfg.beta_diff)
