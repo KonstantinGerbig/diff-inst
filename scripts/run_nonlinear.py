@@ -1,20 +1,21 @@
 # scripts/run_nonlinear.py
+
 import argparse
 import json
 from pathlib import Path
 import numpy as np
 
 from diffinst import Config
-from diffinst.runtime import run_nonlinear_native  # expects a wrapper around NonlinearNative
+from diffinst.runtime import run_nonlinear   # <-- import the dispatcher (not _native)
 
 
-def _write_dry(outdir: Path, cfg: Config) -> None:
+def _write_dry(outdir: Path, cfg: Config, backend: str) -> None:
     (outdir / "checkpoints").mkdir(parents=True, exist_ok=True)
     (outdir / "run.json").write_text(json.dumps({
         "kind": "dry",
         "config": cfg.source_file,
         "Lx": cfg.Lx,
-        "backend": "native",
+        "backend": backend,
         "mode": "nonlinear",
     }, indent=2))
     x = np.linspace(-0.5 * cfg.Lx, 0.5 * cfg.Lx, int(cfg.Nx), endpoint=False)
@@ -23,13 +24,16 @@ def _write_dry(outdir: Path, cfg: Config) -> None:
                         vx=np.zeros_like(x), vy=np.zeros_like(x))
     with (outdir / "metrics.jsonl").open("a") as f:
         f.write(json.dumps({"t": 0.0, "note": "dry_run"}) + "\n")
-    print("[dry] wrote one checkpoint; backend = native | mode = nonlinear | Lx =", cfg.Lx)
+    print(f"[dry] wrote one checkpoint; backend = {backend} | mode = nonlinear | Lx = {cfg.Lx}")
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
     ap.add_argument("--outdir", required=True)
     ap.add_argument("--dry-run", action="store_true")
+
+    ap.add_argument("--backend", choices=["native","dedalus"], default=None,
+                    help="Override YAML solver.backend for this run.")
 
     ap.add_argument("--mode", choices=["nonlinear"], default=None)
     ap.add_argument("--stop_time", type=float, default=10.0,
@@ -52,9 +56,10 @@ def main():
     ap.add_argument("--init-from", type=str, default=None,
                 help="Path to .npz with arrays Sigma,vx,vy,uy to use as initial state.")
 
-    # Optional convenience: orbits override stop_time if provided
     ap.add_argument("--orbits", type=float, default=None,
                     help="If set, stop_time = orbits * 2π / Omega.")
+    
+    ap.add_argument("--Nx", type=int, default=None)
 
     args = ap.parse_args()
     cfg = Config.from_yaml(args.config)
@@ -65,17 +70,21 @@ def main():
         Z = np.load(args.init_from)
         init_state = {k: Z[k] for k in ["Sigma","vx","vy","uy"]}
 
+    # Compute stop_time from orbits if requested
+    stop_time = args.stop_time
+    if args.orbits is not None:
+        Omega = float(getattr(cfg, "Omega", 1.0))
+        stop_time = float(args.orbits) * 2.0 * np.pi / max(Omega, 1e-12)
+
+    # Backend preference: CLI flag wins; else YAML; fallback native
+    backend = args.backend or (getattr(cfg, "solver", {}) or {}).get("backend", "native")
+
     if args.dry_run and args.mode is None:
-        _write_dry(outdir, cfg); return
+        _write_dry(outdir, cfg, backend); return
+    
 
     if args.mode == "nonlinear":
-        stop_time = args.stop_time
-        if args.orbits is not None:
-            Omega = float(getattr(cfg, "Omega", 1.0))
-            stop_time = float(args.orbits) * 2.0 * np.pi / max(Omega, 1e-12)
-
-        # map amplitude: runtime expects "amp" as provided, plus a boolean flag
-        info = run_nonlinear_native(
+        info = run_nonlinear(
             cfg=cfg,
             outdir=outdir,
             stop_time=stop_time,
@@ -89,6 +98,7 @@ def main():
             amp_is_physical=bool(args.amp_physical),
             amp_metric=str(args.amp_metric),
             init_state=init_state,
+            backend=backend,  # <-- pass to dispatcher
         )
         print("[nonlinear] done:", info)
         return

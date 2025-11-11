@@ -71,13 +71,7 @@ def test_nonlinear_pure_diffusion_mode_decay(tmp_path: Path):
     A1 = _fft_mode_amplitude(Sigma1 - Sigma1.mean(), init_k)
     assert A0 > 0 and A1 > 0
 
-
-    # ... after loading Sigma0, Sigma1 and computing k_phys, A0, A1, t0, t1
-
-    # Predict with EVP (dominant eigenvalue at k_phys for the same cfg)
-    w, _ = evp_solve_at_k(cfg, k_phys)
-    gamma = float(w[0].real)     # linear growth/decay rate for Σ at this k
-    A_pred = A0 * np.exp(gamma * (t1 - t0))
-
+    D = float(cfg.D_0)
+    A_pred = A0 * np.exp(-D * (k_phys ** 2) * (t1 - t0))
     rel_err = abs(A1 - A_pred) / max(1e-16, abs(A_pred))
     assert rel_err < 0.15

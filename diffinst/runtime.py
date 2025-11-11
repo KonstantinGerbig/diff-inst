@@ -7,7 +7,12 @@ from .grid import Grid1D
 from .fields import State
 from .io_utils import StreamWriter
 from typing import Optional, Tuple
-from .solvers.native import LinearNative, LinearRunArgs, NonlinearNative, NonlinearRunArgs
+
+# Native solvers
+from .solvers.native_linear import LinearNative, LinearRunArgs 
+from .solvers.native_nonlinear import NonlinearNative, NonlinearRunArgs
+# Dedalus backend
+from .solvers.dedalus_backend import run_dedalus_backend, ensure_dedalus_available
 
 def _build_grid_with_exact_fit(cfg: Config) -> Grid1D:
     grid = Grid1D(cfg.Nx, cfg.Lx)
@@ -114,3 +119,61 @@ def run_nonlinear_native(cfg: Config,
     )
     solver = NonlinearNative(cfg, Path(outdir), args, grid=grid, writer=writer)
     return solver.run()
+
+
+def run_nonlinear(
+    cfg: Config,
+    outdir: str | Path,
+    *,
+    stop_time: float,
+    dt: float,
+    save_stride: int,
+    init_k: int = 1,
+    amp: float = 1e-3,
+    seed: Optional[int] = None,
+    seed_mode: str = "cos",
+    k_phys: Optional[float] = None,
+    amp_is_physical: bool = True,
+    amp_metric: str = "max",
+    init_state: dict | None = None,
+    backend: Optional[str] = None,   # allow CLI override; if None, use YAML
+) -> dict:
+    be = (backend or (getattr(cfg, "solver", {}) or {}).get("backend") or "native").lower()
+
+    if be == "native":
+        return run_nonlinear_native(
+            cfg=cfg,
+            outdir=outdir,
+            stop_time=stop_time,
+            dt=dt,
+            save_stride=save_stride,
+            init_k=init_k,
+            amp=amp,
+            seed=seed,
+            seed_mode=seed_mode,
+            k_phys=k_phys,
+            amp_is_physical=amp_is_physical,
+            amp_metric=amp_metric,
+            init_state=init_state,
+        )
+
+    elif be == "dedalus":
+        ensure_dedalus_available()
+        return run_dedalus_backend(
+            cfg=cfg,
+            outdir=outdir,
+            stop_time=stop_time,
+            dt=dt,
+            save_stride=save_stride,
+            amp=amp,
+            seed=seed,
+            k0=init_k,
+            seed_mode=seed_mode,
+            k_phys=k_phys,
+            amp_is_physical=amp_is_physical,
+            amp_metric=amp_metric,
+            init_state=init_state,
+        )
+
+    else:
+        raise ValueError(f"Unknown nonlinear backend: {be!r}")

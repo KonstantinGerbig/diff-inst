@@ -36,7 +36,7 @@ def L_of_k(cfg: Config, k: float) -> np.ndarray:
     M[2,2] = - (1.0/tS) - nu * (k**2)
     M[2,3] = 1.0 / tS
 
-    # n uy = (ε/tS)(uy - vy) - ν_g k^2 uy
+    # n uy = (ε/tS)(vy - uy) - ν_g k^2 uy
     M[3,2] = eps / tS
     M[3,3] = - (eps / tS) - nug * (k**2)
 
