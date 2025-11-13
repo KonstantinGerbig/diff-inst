@@ -7,6 +7,7 @@ import numpy as np
 
 from diffinst import Config
 from diffinst.runtime import run_nonlinear   # <-- import the dispatcher (not _native)
+from dataclasses import replace
 
 
 def _write_dry(outdir: Path, cfg: Config, backend: str) -> None:
@@ -42,8 +43,16 @@ def main():
     ap.add_argument("--save-stride", type=int, default=100)
 
     # Seeding controls
-    ap.add_argument("--seed-mode", choices=["cos","eigen"], default="cos",
-                    help="cos: Sigma=S0(1+A cos(m)), eigen: seed EVP eigenmode at --k.")
+    ap.add_argument(
+        "--seed-mode",
+        choices=["cos", "eigen", "noise"],
+        default="cos",
+        help=(
+            "cos: Sigma = S0 + A cos(m x); "
+            "eigen: seed EVP eigenmode at --k; "
+            "noise: Sigma = S0 + A * N(0,1) with vx=vy=uy=0."
+        ),
+    )
     ap.add_argument("--init-k", type=int, default=1,
                     help="Harmonic index m for cosine seeding (used when --seed-mode=cos).")
     ap.add_argument("--k", type=float, default=None,
@@ -65,10 +74,21 @@ def main():
     cfg = Config.from_yaml(args.config)
     outdir = Path(args.outdir); outdir.mkdir(parents=True, exist_ok=True)
 
+    if args.Nx is not None:
+        cfg = replace(cfg, Nx=int(args.Nx))
+
     init_state = None
     if args.init_from:
         Z = np.load(args.init_from)
         init_state = {k: Z[k] for k in ["Sigma","vx","vy","uy"]}
+
+        # sanity check: IC resolution must match cfg.Nx
+        n_ic = init_state["Sigma"].shape[0]
+        if n_ic != int(cfg.Nx):
+            raise SystemExit(
+                f"init-from file has Nx={n_ic}, but cfg.Nx={cfg.Nx} (after any --Nx override). "
+                f"Either regenerate the IC at resolution {cfg.Nx} or change --Nx to {n_ic}."
+            )
 
     # Compute stop_time from orbits if requested
     stop_time = args.stop_time

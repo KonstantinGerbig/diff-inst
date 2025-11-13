@@ -38,7 +38,7 @@ class DedalusRunArgs:
     amp: float = 1e-3            # if amp_is_physical: physical |Sigma - S0|
     seed: int | None = None
     k0: int = 1
-    seed_mode: str = "eigen"     # "eigen" or "cos"
+    seed_mode: str = "eigen"     # "eigen" or "cos" or "noise"
     k_phys: float | None = None
     amp_is_physical: bool = True
     amp_metric: str = "max"      # "max" or "rms"
@@ -81,15 +81,28 @@ class DedalusBackend:
     # -------------------- Dedalus domain / fields --------------------
 
     def _build_domain(self):
+        # --- NEW: exact-fit override so Lx matches native runs ---
+        Lx_eff = self.Lx
+        ef = getattr(self.cfg, "exact_fit", None)
+        if isinstance(ef, dict) and ef.get("enable", False):
+            k_target = float(ef["K_target"])
+            harm = int(ef.get("harmonics", 2))
+            # same rule as Grid1D.exact_fit_box: Lx so that m wavelengths fit exactly
+            lam = 2.0 * np.pi / max(k_target, 1e-30)
+            Lx_eff = harm * lam
+        self.Lx = Lx_eff
+        # ---------------------------------------------------------
+
         coords = d3.CartesianCoordinates("x", "y")
         dist = d3.Distributor(coords, dtype=self.dtype)
-        xbasis = d3.RealFourier(coords["x"], size=self.Nx, bounds=(-0.5 * self.Lx, 0.5 * self.Lx), dealias=3/2)
-
+        xbasis = d3.RealFourier(coords["x"], size=self.Nx,
+                                bounds=(-0.5 * self.Lx, 0.5 * self.Lx),
+                                dealias=3/2)
         self.coords = coords
         self.dist = dist
         self.xbasis = xbasis
-        self.x   = dist.local_grid(xbasis)     # shape (Nx, 1) for Dedalus fields
-        self.x1d = np.ravel(self.x)            # shape (Nx,) for numpy math
+        self.x   = dist.local_grid(xbasis)   # (Nx,1)
+        self.x1d = np.ravel(self.x)          # (Nx,)
 
     def _build_fields(self):
         # Dust fields: Σ and v=(vx, vy); Gas: uy (axisymmetric closure)
@@ -156,6 +169,7 @@ class DedalusBackend:
             vx = np.asarray(self.args.init_state["vx"], dtype=self.dtype).reshape(-1, 1)
             vy = np.asarray(self.args.init_state["vy"], dtype=self.dtype).reshape(-1, 1)
             uy = np.asarray(self.args.init_state["uy"], dtype=self.dtype).reshape(-1, 1)
+
         elif self.args.seed_mode == "eigen" and (self.args.k_phys is not None):
             k = float(self.args.k_phys)
             w, V = evp_solve_at_k(self.cfg, k)
@@ -185,6 +199,21 @@ class DedalusBackend:
             vx = (scale * vx_raw).reshape(-1, 1)
             vy = (scale * vy_raw).reshape(-1, 1)
             uy = (scale * uy_raw).reshape(-1, 1)
+
+        elif self.args.seed_mode == "noise":
+            # Random noise in Sigma, zero velocities
+            if self.args.amp_is_physical:
+                amp_phys = self.args.amp
+            else:
+                amp_phys = self.args.amp * S0
+
+            # N(0,1) noise scaled by amp_phys
+            Sigma_1d = S0 + amp_phys * rng.standard_normal(self.Nx)
+            Sigma = Sigma_1d.reshape(-1, 1)
+            vx = np.zeros_like(Sigma)
+            vy = np.zeros_like(Sigma)
+            uy = np.zeros_like(Sigma)
+
         else:
             # Cosine seed
             k0 = int(self.args.k0)
@@ -260,7 +289,9 @@ class DedalusBackend:
         problem.add_equation("dt(uy) + drag_on_gas = gas_visc")
 
         # Fixed RK443 with user dt
-        timestepper = d3.RK443
+        #timestepper = d3.RK443
+        #
+        timestepper = d3.RK222
         self.solver = problem.build_solver(timestepper)
 
         # Stop condition: sim_time

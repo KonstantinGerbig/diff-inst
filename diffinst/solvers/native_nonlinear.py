@@ -27,7 +27,7 @@ class NonlinearRunArgs:
     seed: int | None = None
     k0: int = 1
     init_metric: str = "max"
-    seed_mode: str = "cos"     # "cos" or "eigen"        # 
+    seed_mode: str = "cos"     # "cos" or "eigen"  or "noise"      # 
     k_phys: float | None = None                          # 
     amp_is_physical: bool = True                         # 
     amp_metric: str = "max"                              #  ("max" or "rms")
@@ -84,6 +84,7 @@ class NonlinearNative:
 
 
     def _init_state(self, init_state=None):
+        rng = np.random.default_rng(self.args.seed)
         S0   = float(getattr(self.cfg, "S0", getattr(self.cfg, "sig_0", 1.0)))
         amp  = float(self.args.amp)
         k0   = int(self.args.k0)
@@ -131,12 +132,26 @@ class NonlinearNative:
             vx    = scale * vx_raw
             vy    = scale * vy_raw
             uy    = scale * uy_raw
+        
+        elif self.args.seed_mode == "noise":
+            if self.args.amp_is_physical:
+                amp_phys = self.args.amp
+            else:
+                amp_phys = self.args.amp * S0
 
-        else:
-            # cosine seed (legacy)
+            Sigma = S0 + amp_phys * rng.standard_normal(self.Nx)
+            vx = np.zeros_like(Sigma)
+            vy = np.zeros_like(Sigma)
+            uy = np.zeros_like(Sigma)
+
+        elif self.args.seed_mode == "cos":
             phase = 0.0
-            Sigma = S0 * (1.0 + (amp if self.args.amp_is_physical else amp * S0) * 
-                          np.cos(k0 * 2.0*np.pi * (x - x.min()) / self.Lx + phase) / max(S0, 1e-30))
+            if self.args.amp_is_physical:
+                amp_phys = amp
+            else:
+                amp_phys = amp * S0
+
+            Sigma = S0 + amp_phys * np.cos(k0 * 2.0*np.pi*(x - x.min())/self.Lx + phase)
             vx = np.zeros_like(Sigma)
             vy = np.zeros_like(Sigma)
             uy = np.zeros_like(Sigma)

@@ -98,8 +98,21 @@ def nearest_k_index(Lx: float, Nx: int, k_phys: float) -> int:
     return int(np.argmin(np.abs(ks - float(k_phys))))
 
 def amplitude_at_k_from_sigma(Sigma: np.ndarray, k_idx: int) -> float:
-    """Return |FFT(Sigma - mean)[k_idx]|."""
-    return float(np.abs(np.fft.rfft(Sigma - Sigma.mean())[k_idx]))
+    """
+    Resolution-independent amplitude at mode k_idx.
+
+    Returns the physical cosine amplitude A_k such that
+    Sigma(x) ~ ... + A_k cos(kx + phi), independent of Nx.
+    """
+    s = Sigma - Sigma.mean()
+    ak = np.fft.rfft(s)
+    N = s.size
+    if k_idx == 0:
+        # DC mode: no factor 2
+        return float(np.abs(ak[0]) / N)
+    else:
+        # k>0: A = 2|ak[k]|/N
+        return float(2.0 * np.abs(ak[k_idx]) / N)
 
 def amplitude_series_from_sigma(T: np.ndarray, Sigma_series: np.ndarray, k_idx: int) -> Tuple[np.ndarray, np.ndarray]:
     A = np.array([amplitude_at_k_from_sigma(S, k_idx) for S in Sigma_series])
@@ -112,7 +125,9 @@ def amplitude_series_from_linear(files: Iterable[Path], Nx: int, Sigma0: float, 
             T.append(float(Z["t"]))
             S_hat = Z["Xhat"][:, 0]
             s_x = np.fft.irfft(S_hat, n=Nx)
-            A.append(float(np.abs(np.fft.rfft(s_x)[k_idx])))
+            # s_x is the perturbation; reconstruct full Sigma if you prefer:
+            Sigma = Sigma0 + s_x
+            A.append(amplitude_at_k_from_sigma(Sigma, k_idx))
     return np.array(T), np.array(A)
 
 # ---------- IC I/O helpers ----------
