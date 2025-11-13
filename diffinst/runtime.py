@@ -11,8 +11,8 @@ from typing import Optional, Tuple
 # Native solvers
 from .solvers.native_linear import LinearNative, LinearRunArgs 
 from .solvers.native_nonlinear import NonlinearNative, NonlinearRunArgs
-# Dedalus backend
-from .solvers.dedalus_backend import run_dedalus_backend, ensure_dedalus_available
+# Dedalus backend only loaded when needed below
+
 
 def _build_grid_with_exact_fit(cfg: Config) -> Grid1D:
     grid = Grid1D(cfg.Nx, cfg.Lx)
@@ -102,6 +102,7 @@ def run_nonlinear_native(cfg: Config,
                          amp_is_physical: bool = True,   # 
                          amp_metric: str = "max",        # 
                          init_state: dict | None = None,
+                         print_stride: Optional[int] = None,
                          ) -> dict:
     grid, _state_unused, writer = prepare_run(cfg, outdir, kind="nonlinear_native", backend="native")
     args = NonlinearRunArgs(
@@ -115,7 +116,8 @@ def run_nonlinear_native(cfg: Config,
         k_phys=k_phys,
         amp_is_physical=amp_is_physical,
         amp_metric=amp_metric,
-        init_state=init_state
+        init_state=init_state,
+        print_stride=print_stride,
     )
     solver = NonlinearNative(cfg, Path(outdir), args, grid=grid, writer=writer)
     return solver.run()
@@ -137,6 +139,7 @@ def run_nonlinear(
     amp_metric: str = "max",
     init_state: dict | None = None,
     backend: Optional[str] = None,   # allow CLI override; if None, use YAML
+    print_stride: Optional[int] = None,
 ) -> dict:
     be = (backend or (getattr(cfg, "solver", {}) or {}).get("backend") or "native").lower()
 
@@ -155,9 +158,13 @@ def run_nonlinear(
             amp_is_physical=amp_is_physical,
             amp_metric=amp_metric,
             init_state=init_state,
+            print_stride=print_stride,
         )
 
     elif be == "dedalus":
+        # import dedalus backend only when needed
+        from .solvers.dedalus_backend import run_dedalus_backend, ensure_dedalus_available 
+
         ensure_dedalus_available()
         return run_dedalus_backend(
             cfg=cfg,
@@ -173,6 +180,7 @@ def run_nonlinear(
             amp_is_physical=amp_is_physical,
             amp_metric=amp_metric,
             init_state=init_state,
+            print_stride=print_stride,
         )
 
     else:

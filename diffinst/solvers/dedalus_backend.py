@@ -43,7 +43,7 @@ class DedalusRunArgs:
     amp_is_physical: bool = True
     amp_metric: str = "max"      # "max" or "rms"
     init_state: dict | None = None  # real-space arrays: Sigma, vx, vy, uy
-    print_stride: int = 200
+    print_stride: int = None
 
 class DedalusBackend:
     """
@@ -77,6 +77,17 @@ class DedalusBackend:
 
         # log
         self.log = logging.getLogger(__name__)
+        self.log.setLevel(logging.INFO)
+
+        # Only attach our own handler if none attached yet
+        if not self.log.handlers:
+            h = logging.StreamHandler()
+            fmt = "%(asctime)s %(name)s %(levelname)s :: %(message)s"
+            h.setFormatter(logging.Formatter(fmt))
+            self.log.addHandler(h)
+
+        # Prevent log records from also going to the root logger’s handlers
+        self.log.propagate = False
 
     # -------------------- Dedalus domain / fields --------------------
 
@@ -344,7 +355,11 @@ class DedalusBackend:
         t = self.solver.sim_time
         dt = float(self.args.dt)
         save_stride = int(self.args.save_stride)
-        print_stride = int(self.args.print_stride)
+
+        if self.args.print_stride:
+            print_stride = int(self.args.print_stride)
+        else:
+            print_stride = None
 
         istep = 0
         while self.solver.proceed:
@@ -360,8 +375,10 @@ class DedalusBackend:
             guy  = np.copy(self.uy["g"]).squeeze(-1)
 
             # Progress log
-            if istep % print_stride == 0:
-                self.log.info("Dedalus step=%d  t=%.6e  dt=%.3e", istep, t, dt)
+            
+            if print_stride:
+                if istep % print_stride == 0:
+                    self.log.info("Dedalus step=%d  t=%.6e  dt=%.3e", istep, t, dt)
 
             # NaN/Inf guard — abort cleanly
             if not (np.isfinite(gsig).all() and np.isfinite(gvx).all()
@@ -395,6 +412,7 @@ def run_dedalus_backend(
     amp_is_physical: bool = True,
     amp_metric: str = "max",
     init_state: dict | None = None,
+    print_stride: int = None,
 ):
     ensure_dedalus_available()
     args = DedalusRunArgs(
@@ -409,6 +427,7 @@ def run_dedalus_backend(
         amp_is_physical=amp_is_physical,
         amp_metric=amp_metric,
         init_state=init_state,
+        print_stride=print_stride,
     )
     solver = DedalusBackend(cfg, Path(outdir), args)
     return solver.run()

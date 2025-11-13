@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 import numpy as np
+import logging
 
 from diffinst import Config
 from diffinst.runtime import run_nonlinear   # <-- import the dispatcher (not _native)
@@ -28,6 +29,14 @@ def _write_dry(outdir: Path, cfg: Config, backend: str) -> None:
     print(f"[dry] wrote one checkpoint; backend = {backend} | mode = nonlinear | Lx = {cfg.Lx}")
 
 def main():
+
+    # Configure logging at CLI entry
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s :: %(message)s",
+    )
+
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
     ap.add_argument("--outdir", required=True)
@@ -41,6 +50,8 @@ def main():
                     help="Total integration time (code units).")
     ap.add_argument("--dt", type=float, default=1e-3)
     ap.add_argument("--save-stride", type=int, default=100)
+
+    ap.add_argument("--print-stride", type=int, default=None)
 
     # Seeding controls
     ap.add_argument(
@@ -118,7 +129,8 @@ def main():
             amp_is_physical=bool(args.amp_physical),
             amp_metric=str(args.amp_metric),
             init_state=init_state,
-            backend=backend,  # <-- pass to dispatcher
+            backend=backend,  # <-- pass to dispatcher,
+            print_stride=args.print_stride
         )
         print("[nonlinear] done:", info)
         return

@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Tuple
+import logging
 
 import numpy as np
 from numpy.fft import rfftfreq
@@ -32,6 +33,7 @@ class NonlinearRunArgs:
     amp_is_physical: bool = True                         # 
     amp_metric: str = "max"                              #  ("max" or "rms")
     init_state: dict | None = None
+    print_stride: int = None
 
 class NonlinearNative:
     """
@@ -70,6 +72,9 @@ class NonlinearNative:
 
         # state (include uy always)
         self.state = self._init_state(init_state=getattr(self.args, "init_state", None))
+
+        # log
+        self.log = logging.getLogger(__name__)
 
     def _write_manifest(self):
         man = {
@@ -222,6 +227,11 @@ class NonlinearNative:
         stop_time = float(self.args.stop_time)
         save_stride = int(self.args.save_stride)
 
+        if self.args.print_stride:
+            print_stride = int(self.args.print_stride)
+        else:
+            print_stride = None
+
         istep = 0
         self._write_checkpoint(istep, t)
         self.writer.write_metric(self._diag(t))
@@ -232,8 +242,14 @@ class NonlinearNative:
             self.state = self._step_imex_rk2(self.state, t_next - t)
             t = t_next
 
+            # Progress log
+            if print_stride:
+                if istep % print_stride == 0:
+                    self.log.info("Native nonlinear step=%d  t=%.6e  dt=%.3e", istep, t, dt)
+
             self.writer.write_metric(self._diag(t))
             if istep % save_stride == 0 or t >= stop_time:
                 self._write_checkpoint(istep, t)
+            
 
         return {"t_final": t, "steps": istep, "Nx": self.Nx, "Lx": self.Lx}
