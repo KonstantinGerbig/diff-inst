@@ -20,7 +20,7 @@ def _build_grid_with_exact_fit(cfg: Config) -> Grid1D:
     if ef.get("enable", False):
         k_target = float(ef["K_target"])
         harm = int(ef.get("harmonics", 2))
-        Lx_new = grid.exact_fit_box(k_target, harm)
+        Lx_new = grid.exact_fit_Lx(k_target, harm)
         grid = Grid1D(cfg.Nx, Lx_new)
     return grid
 

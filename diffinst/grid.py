@@ -10,6 +10,7 @@ class Grid1D:
     def k_rfft(self) -> np.ndarray:
         dx = self.Lx / self.Nx
         return 2*np.pi * np.fft.rfftfreq(self.Nx, d=dx)
-    def exact_fit_box(self, k_target: float, harmonics: int = 2) -> float:
-        m = max(1, int(harmonics))
-        return 2*np.pi * m / float(k_target)
+    
+    def exact_fit_Lx(self, k_target: float, harmonics: int) -> float:
+        lam = 2.0 * np.pi / max(k_target, 1e-30)
+        return harmonics * lam

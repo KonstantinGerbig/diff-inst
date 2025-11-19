@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import numpy as np
 import logging
+import shutil
 
 from diffinst import Config
 from diffinst.runtime import run_nonlinear   # <-- import the dispatcher (not _native)
@@ -81,9 +82,20 @@ def main():
     
     ap.add_argument("--Nx", type=int, default=None)
 
+    ap.add_argument("--force", action="store_true",
+                    help="Delete the output directory if it already exists.")
+
     args = ap.parse_args()
     cfg = Config.from_yaml(args.config)
-    outdir = Path(args.outdir); outdir.mkdir(parents=True, exist_ok=True)
+
+    outdir = Path(args.outdir)
+    # force delete existing directory
+    if outdir.exists() and args.force:
+        print(f"[INFO] Removing existing output directory: {outdir}")
+        shutil.rmtree(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+
 
     if args.Nx is not None:
         cfg = replace(cfg, Nx=int(args.Nx))

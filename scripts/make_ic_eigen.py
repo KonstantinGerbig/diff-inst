@@ -8,6 +8,7 @@ import numpy as np
 from diffinst import Config
 from diffinst.linear_ops import evp_solve_at_k
 from diffinst.analysis_api import save_ic_npz
+from diffinst.grid import Grid1D
 
 
 def build_ic(
@@ -17,6 +18,7 @@ def build_ic(
     amp_phys: float,
     Nx_override: int | None = None,
     phase: float = 0.0,
+    exact_fit_harm : int | None = None,
 ) -> Path:
     """
     Build a single eigenmode IC and write it as a compressed .npz file.
@@ -30,7 +32,13 @@ def build_ic(
     """
     # Effective resolution / box
     Nx = int(Nx_override) if Nx_override is not None else int(cfg.Nx)
-    Lx = float(cfg.Lx)
+    base_Lx = float(cfg.Lx)
+    grid = Grid1D(Nx=Nx, Lx=base_Lx)
+
+    if exact_fit_harm is not None:
+        Lx = grid.exact_fit_Lx(k_phys, exact_fit_harm)
+    else:
+        Lx = grid.Lx
 
     # Background Sigma_0
     S0 = float(getattr(cfg, "S0", getattr(cfg, "sig_0", 1.0)))
@@ -96,6 +104,8 @@ def main():
                     help="Optional grid size override for IC (defaults to cfg.Nx).")
     ap.add_argument("--phase", type=float, default=0.0,
                     help="Optional phase offset in the eigenmode.")
+    ap.add_argument("--exact-fit-harm", type=int, default=None,
+                    help="Optional integer m to make Lx fit exactly m eigenmode")
 
     args = ap.parse_args()
 
@@ -115,6 +125,7 @@ def main():
         amp_phys=float(args.amp),
         Nx_override=args.Nx,
         phase=float(args.phase),
+        exact_fit_harm=args.exact_fit_harm
     )
     print(f"[make_ic_eigen] IC written to {outpath} "
           f"(k={args.k}, amp={args.amp}, Nx={args.Nx or cfg.Nx})")

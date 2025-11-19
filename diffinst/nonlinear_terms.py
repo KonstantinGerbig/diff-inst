@@ -9,11 +9,42 @@ def _p(params, a, b=None, default=None):
         return params[b]
     return default
 
+def _validate_closure(Sigma_eff, S0, D_raw, nu_raw, where="compute_D_nu"):
+    """Debug helper: raise with useful diagnostics if closures misbehave."""
+    problems = []
+
+    if not np.all(np.isfinite(Sigma_eff)):
+        problems.append("Sigma_eff has non-finite values")
+
+    ratio = Sigma_eff / S0
+    if np.any(ratio <= 0):
+        problems.append("Sigma_eff/S0 has non-positive values")
+
+    if not np.all(np.isfinite(D_raw)):
+        problems.append("D_raw has non-finite values")
+    if not np.all(np.isfinite(nu_raw)):
+        problems.append("nu_raw has non-finite values")
+
+    if problems:
+        msg = (
+            f"[{where}] closure diagnostic failed:\n"
+            f"  issues: {', '.join(problems)}\n"
+            f"  Sigma_eff: min={Sigma_eff.min():.3e}, max={Sigma_eff.max():.3e}\n"
+            f"  D_raw:     min={np.nanmin(D_raw):.3e}, max={np.nanmax(D_raw):.3e}\n"
+            f"  nu_raw:    min={np.nanmin(nu_raw):.3e}, max={np.nanmax(nu_raw):.3e}"
+        )
+        raise FloatingPointError(msg)
+
 
 def compute_D_nu(Sigma: np.ndarray, params: dict):
     """
-    Compute diffusion and viscosity coefficients D, nu for a given Sigma,
-    assuming Sigma has already been clamped to a positive floor.
+    Compute diffusion and viscosity coefficients D, nu for a given Sigma.
+
+    Internally:
+      - enforce a positive floor on Sigma before any powers/divisions
+      - compute D_raw, nu_raw from a power law
+      - validate that everything is finite and sane
+      - clip D, nu to a moderate range around D0, nu0
     """
     S0 = float(params.get("S0", float(np.mean(Sigma))))
     D0 = float(_p(params, "D0", "D_0", 0.0))
@@ -21,11 +52,21 @@ def compute_D_nu(Sigma: np.ndarray, params: dict):
     beta_diff = float(params.get("beta_diff", 0.0))
     beta_visc = float(params.get("beta_visc", 0.0))
 
-    # power-law closures
-    D_raw  = D0  * (Sigma / S0) ** beta_diff
-    nu_raw = nu0 * (Sigma / S0) ** beta_visc
+    # 1) Enforce a *positive* floor on Sigma before forming powers.
+    #    We only use Sigma_eff in closures; the continuity equation can still use Sigma.
+    sigma_floor = 1e-12 * max(S0, 1.0)   # relative-ish floor; tweak if you like
+    Sigma_eff = np.maximum(Sigma, sigma_floor)
 
-    # mild safety clip to avoid insane values if Sigma dips near the floor
+    ratio = Sigma_eff / S0
+
+    # 2) Power-law closures (can still overflow if beta is large and ratio extreme)
+    D_raw  = D0  * ratio**beta_diff
+    nu_raw = nu0 * ratio**beta_visc
+
+    # 3) Check for NaNs/Infs or obviously bad values *before* clipping
+    _validate_closure(Sigma_eff, S0, D_raw, nu_raw, where="compute_D_nu")
+
+    # 4) Mild safety clip to avoid insane values if Sigma dips near the floor
     if D0 != 0.0:
         D = np.clip(D_raw, 1e-4 * D0, 1e4 * D0)
     else:
