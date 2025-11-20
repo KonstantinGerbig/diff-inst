@@ -9,6 +9,33 @@ def _p(params, a, b=None, default=None):
         return params[b]
     return default
 
+
+def smooth_gaussian(f: np.ndarray, Lx: float, frac: float = 0.25):
+    """
+    Spectral Gaussian smoother:
+        f_smooth = IFFT[ exp(-(k/kc)^2) * FFT[f] ]
+
+    Parameters
+    ----------
+    f : ndarray (real)
+    Lx : domain size
+    frac : fraction of Nyquist frequency at which the Gaussian is ~exp(-1)
+
+    Returns
+    -------
+    ndarray : smoothed field, same shape
+    """
+    Nx = f.size
+    dk = 2.0 * np.pi / Lx
+    k = dk * np.fft.fftfreq(Nx)       # full symmetric k-array
+    k_nyq = np.max(np.abs(k))
+    k_c = frac * k_nyq                # characteristic cutoff
+
+    g = np.exp(-(k / k_c)**2)         # Gaussian filter
+    F = np.fft.fft(f)
+    f_smooth = np.fft.ifft(F * g).real
+    return f_smooth
+
 def _validate_closure(Sigma_eff, S0, D_raw, nu_raw, where="compute_D_nu"):
     """Debug helper: raise with useful diagnostics if closures misbehave."""
     problems = []
@@ -38,44 +65,44 @@ def _validate_closure(Sigma_eff, S0, D_raw, nu_raw, where="compute_D_nu"):
 
 def compute_D_nu(Sigma: np.ndarray, params: dict):
     """
-    Compute diffusion and viscosity coefficients D, nu for a given Sigma.
+    Compute diffusion & viscosity closures using a *smoothed* Sigma_eff.
 
-    Internally:
-      - enforce a positive floor on Sigma before any powers/divisions
-      - compute D_raw, nu_raw from a power law
-      - validate that everything is finite and sane
-      - clip D, nu to a moderate range around D0, nu0
+    Steps:
+      (1) Smooth Sigma spectrally
+      (2) Enforce floor
+      (3) Compute power-law closures
+      (4) Validate
+      (5) Clip to reasonable bandwidth around (D0, nu0)
     """
     S0 = float(params.get("S0", float(np.mean(Sigma))))
     D0 = float(_p(params, "D0", "D_0", 0.0))
     nu0 = float(_p(params, "nu0", "nu_0", 0.0))
     beta_diff = float(params.get("beta_diff", 0.0))
     beta_visc = float(params.get("beta_visc", 0.0))
+    Lx = float(params.get("Lx", 1.0))        # require Lx in params
+    smooth_frac = float(params.get("closure_smooth_frac", 0.2))
 
-    # 1) Enforce a *positive* floor on Sigma before forming powers.
-    #    We only use Sigma_eff in closures; the continuity equation can still use Sigma.
-    sigma_floor = 1e-12 * max(S0, 1.0)   # relative-ish floor; tweak if you like
-    Sigma_eff = np.maximum(Sigma, sigma_floor)
+    # --- (1) Smooth Sigma using spectral Gaussian ---
+    Sigma_smooth = smooth_gaussian(Sigma, Lx, frac=smooth_frac)
+
+    # --- (2) Enforce a positive floor ---
+    sigma_floor = 1e-12 * max(S0, 1.0)
+    Sigma_eff = np.maximum(Sigma_smooth, sigma_floor)
 
     ratio = Sigma_eff / S0
 
-    # 2) Power-law closures (can still overflow if beta is large and ratio extreme)
+    # --- (3) Power-law closures ---
     D_raw  = D0  * ratio**beta_diff
     nu_raw = nu0 * ratio**beta_visc
 
-    # 3) Check for NaNs/Infs or obviously bad values *before* clipping
+    # --- (4) Validation BEFORE clipping ---
     _validate_closure(Sigma_eff, S0, D_raw, nu_raw, where="compute_D_nu")
 
-    # 4) Mild safety clip to avoid insane values if Sigma dips near the floor
-    if D0 != 0.0:
-        D = np.clip(D_raw, 1e-4 * D0, 1e4 * D0)
-    else:
-        D = D_raw
-
-    if nu0 != 0.0:
-        nu = np.clip(nu_raw, 1e-4 * nu0, 1e4 * nu0)
-    else:
-        nu = nu_raw
+    # --- (5) Clip to reasonable ranges ---
+    clip_lo = 1e-3
+    clip_hi = 1e3
+    D = np.clip(D_raw,  clip_lo * D0, clip_hi * D0) if D0 != 0 else D_raw
+    nu = np.clip(nu_raw, clip_lo * nu0, clip_hi * nu0) if nu0 != 0 else nu_raw
 
     return D, nu
 

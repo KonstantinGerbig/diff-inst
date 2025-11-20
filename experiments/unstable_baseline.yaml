@@ -1,11 +1,11 @@
 # Unstable baseline for EVP/time-domain growth figures
 # Matches the diffusion-slope branch (small τ_s; β_diff < -2)
 
-beta_diff: -2.5
-beta_visc: -2.5
+beta_diff: -2.3
+beta_visc: 0
 ts: 0.1
 D_0: 1.0e-5
-nu_0: 1.0e-5
+nu_0: 2.0e-5
 nu_g: 1.0e-3
 eps: 1.0
 q: 1.5
