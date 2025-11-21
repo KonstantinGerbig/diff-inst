@@ -132,20 +132,57 @@ def amplitude_series_from_linear(files: Iterable[Path], Nx: int, Sigma0: float, 
 
 # ---------- IC I/O helpers ----------
 
-def load_ic_npz(path: Path | str) -> Dict[str, np.ndarray]:
-    """Expected keys: Sigma, vx, vy, uy; optional meta."""
-    Z = np.load(path)
-    out = {k: np.asarray(Z[k]) for k in ("Sigma", "vx", "vy", "uy")}
+def load_ic_npz(path: Path | str):
+    Z = np.load(path, allow_pickle=True)
+    out = {}
+
+    out["Sigma"] = np.asarray(Z["Sigma"])
+    out["vx"]    = np.asarray(Z["vx"])
+    out["vy"]    = np.asarray(Z["vy"])
+
+    if "uy" in Z.files:
+        out["uy"] = np.asarray(Z["uy"])
+    else:
+        # Dust-only IC → linear solver still wants 4 components
+        out["uy"] = np.zeros_like(out["Sigma"])
+
     if "meta" in Z.files:
-        out["meta"] = Z["meta"].item() if Z["meta"].dtype == object else Z["meta"]
+        meta = Z["meta"]
+        out["meta"] = meta.item() if isinstance(meta, np.ndarray) else meta
+
     return out
 
-def save_ic_npz(path: Path | str, Sigma: np.ndarray, vx: np.ndarray, vy: np.ndarray, uy: np.ndarray, meta: Optional[dict]=None) -> None:
-    path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
+def save_ic_npz(
+    path: Path | str,
+    Sigma: np.ndarray,
+    vx: np.ndarray,
+    vy: np.ndarray,
+    uy: Optional[np.ndarray] = None,
+    meta: Optional[dict] = None,
+) -> None:
+    """
+    Save an initial condition to a compressed .npz file.
+
+    For dust-only setups, uy may be passed as None; we then store
+    an array of zeros with the same shape as Sigma.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if uy is None:
+        uy = np.zeros_like(Sigma)
+
     if meta is None:
         np.savez_compressed(path, Sigma=Sigma, vx=vx, vy=vy, uy=uy)
     else:
-        np.savez_compressed(path, Sigma=Sigma, vx=vx, vy=vy, uy=uy, meta=np.array(meta, dtype=object))
+        np.savez_compressed(
+            path,
+            Sigma=Sigma,
+            vx=vx,
+            vy=vy,
+            uy=uy,
+            meta=np.array(meta, dtype=object),
+        )
 
 # ---------- EVP convenience ----------
 

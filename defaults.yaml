@@ -27,7 +27,7 @@ log_stride: 50
 
 # options / solver backend toggle
 enable_gas: true
-enable_dedalus_evp: true
+enable_dedalus_evp: false
 # choose IVP backend later (either "native" or "dedalus")
 solver:
   backend: native

@@ -11,7 +11,7 @@ eps: 1.0
 q: 1.5
 
 # gas
-enable_gas: true   # or false
+enable_gas: false   # or false
 
 # grid / domain
 Nx: 128

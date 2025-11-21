@@ -119,7 +119,7 @@ def run_nonlinear_native(cfg: Config,
         init_state=init_state,
         print_stride=print_stride,
     )
-    solver = NonlinearNative(cfg, Path(outdir), args, grid=grid, writer=writer)
+    solver = NonlinearNative(cfg, Path(outdir), args, grid=grid, writer=writer, enable_gas=cfg.enable_gas)
     return solver.run()
 
 

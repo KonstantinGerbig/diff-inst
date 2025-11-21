@@ -18,17 +18,19 @@ def build_ic(
     amp_phys: float,
     Nx_override: int | None = None,
     phase: float = 0.0,
-    exact_fit_harm : int | None = None,
+    exact_fit_harm: int | None = None,
 ) -> Path:
     """
     Build a single eigenmode IC and write it as a compressed .npz file.
 
-    - cfg:        physics/background parameters
-    - outpath:    where to write the IC (npz)
-    - k_phys:     physical wavenumber (rad/unit)
-    - amp_phys:   physical amplitude of |Sigma - S0| (max norm)
+    - cfg:         physics/background parameters
+    - outpath:     where to write the IC (npz)
+    - k_phys:      physical wavenumber (rad/unit)
+    - amp_phys:    physical amplitude of |Sigma - S0| (max norm)
     - Nx_override: if not None, use this Nx for the grid instead of cfg.Nx
-    - phase:      optional phase offset in the eigenmode exp(i k x + phase)
+    - phase:       optional phase offset in the eigenmode exp(i k x + phase)
+    - exact_fit_harm: if not None, adjust Lx so that k_phys fits an integer
+                      number of wavelengths (harmonics) in the box
     """
     # Effective resolution / box
     Nx = int(Nx_override) if Nx_override is not None else int(cfg.Nx)
@@ -36,7 +38,7 @@ def build_ic(
     grid = Grid1D(Nx=Nx, Lx=base_Lx)
 
     if exact_fit_harm is not None:
-        Lx = grid.exact_fit_Lx(k_phys, exact_fit_harm)
+        Lx = grid.exact_fit_Lx(k_target=k_phys, harmonics=exact_fit_harm)
     else:
         Lx = grid.Lx
 
@@ -48,14 +50,33 @@ def build_ic(
 
     # Solve EVP at k_phys
     w, V = evp_solve_at_k(cfg, k_phys)
-    v = V[:, 0]  # dominant eigenvector [Sigma, vx, vy, uy]
+    v = V[:, 0]  # dominant eigenvector
 
+    nvar = v.shape[0]
+    enable_gas = getattr(cfg, "enable_gas", True)
+
+    # Build eigenmode in real space
     eikx = np.exp(1j * (k_phys * (x - x.min()) + phase))
 
-    S_raw  = (v[0] * eikx).real
-    vx_raw = (v[1] * eikx).real
-    vy_raw = (v[2] * eikx).real
-    uy_raw = (v[3] * eikx).real
+    if nvar == 4:
+        # gas-inclusive model: [Sigma, vx, vy, uy]
+        S_raw  = (v[0] * eikx).real
+        vx_raw = (v[1] * eikx).real
+        vy_raw = (v[2] * eikx).real
+        uy_raw = (v[3] * eikx).real
+    elif nvar == 3:
+        # dust-only limit of current model: [Sigma, vx, vy]
+        # we still write an uy field, but set it to zero everywhere
+        S_raw  = (v[0] * eikx).real
+        vx_raw = (v[1] * eikx).real
+        vy_raw = (v[2] * eikx).real
+        uy_raw = np.zeros_like(S_raw)
+        enable_gas = False
+    else:
+        raise ValueError(
+            f"Unexpected eigenvector size {nvar} in make_ic_eigen "
+            f"(expected 3 or 4)."
+        )
 
     # Scale so that max |Sigma - S0| = amp_phys
     a_now = float(np.max(np.abs(S_raw))) if np.any(S_raw != 0.0) else 0.0
@@ -68,18 +89,21 @@ def build_ic(
     vx0    = scale * vx_raw
     vy0    = scale * vy_raw
     uy0    = scale * uy_raw
+    if uy0 is None:
+        uy0 = np.zeros_like(Sigma0)
 
     outpath = Path(outpath)
     outpath.parent.mkdir(parents=True, exist_ok=True)
 
     meta = {
-        "k_phys": float(k_phys),
+        "k_phys":   float(k_phys),
         "amp_phys": float(amp_phys),
-        "Nx": int(Nx),
-        "Lx": float(Lx),
-        "S0": float(S0),
-        "phase": float(phase),
-        "config": str(cfg.source_file),
+        "Nx":       int(Nx),
+        "Lx":       float(Lx),
+        "S0":       float(S0),
+        "phase":    float(phase),
+        "config":   str(getattr(cfg, "source_file", "")),
+        "enable_gas": bool(enable_gas),
     }
 
     save_ic_npz(outpath, Sigma0, vx0, vy0, uy0, meta=meta)
@@ -105,7 +129,7 @@ def main():
     ap.add_argument("--phase", type=float, default=0.0,
                     help="Optional phase offset in the eigenmode.")
     ap.add_argument("--exact-fit-harm", type=int, default=None,
-                    help="Optional integer m to make Lx fit exactly m eigenmode")
+                    help="Optional integer m to make Lx fit exactly m eigenmode.")
 
     args = ap.parse_args()
 
@@ -125,10 +149,12 @@ def main():
         amp_phys=float(args.amp),
         Nx_override=args.Nx,
         phase=float(args.phase),
-        exact_fit_harm=args.exact_fit_harm
+        exact_fit_harm=args.exact_fit_harm,
     )
-    print(f"[make_ic_eigen] IC written to {outpath} "
-          f"(k={args.k}, amp={args.amp}, Nx={args.Nx or cfg.Nx})")
+    print(
+        f"[make_ic_eigen] IC written to {outpath} "
+        f"(k={args.k}, amp={args.amp}, Nx={args.Nx or cfg.Nx})"
+    )
 
 
 if __name__ == "__main__":

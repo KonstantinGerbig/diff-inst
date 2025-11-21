@@ -45,6 +45,10 @@ class LinearNative:
         self.outdir.mkdir(parents=True, exist_ok=True)
         self.args = args
 
+        # gas toggle & variable count
+        self.use_gas = bool(getattr(cfg, "enable_gas", True))
+        self.nvar = 4 if self.use_gas else 3  # [S,vx,vy,(uy)]
+
         # --- grid (use provided orchestrated grid if available)
         if grid is None:
             self.Nx = int(cfg.Nx)
@@ -60,7 +64,7 @@ class LinearNative:
         self.k = 2.0 * np.pi * rfftfreq(self.Nx, d=self.dx)
         self.Nk = len(self.k)
 
-        self.Xhat = np.zeros((self.Nk, 4), dtype=np.complex128)
+        self.Xhat = np.zeros((self.Nk, self.nvar), dtype=np.complex128)
         self._spec_cache = {}
         self._prepare_spectral_operators()
 
@@ -125,22 +129,33 @@ class LinearNative:
         rng = np.random.default_rng(self.args.seed)
 
         if init_state is not None:
-            # Expect real-space arrays: Sigma, vx, vy, uy ; convert to spectral Xhat=[S_hat,vx_hat,vy_hat,uy_hat]
+            # Expect real-space arrays: Sigma, vx, vy, (uy optional).
             Sigma = np.asarray(init_state["Sigma"])
             vx    = np.asarray(init_state["vx"])
             vy    = np.asarray(init_state["vy"])
-            uy    = np.asarray(init_state["uy"])
-            # S = Sigma - S0 (perturbation)
+            # uy may or may not exist; for dust-only we ignore it anyway
+            uy = np.asarray(init_state.get("uy", np.zeros_like(Sigma)))
+
             S0 = float(getattr(self.cfg, "S0", getattr(self.cfg, "sig_0", 1.0)))
             s = Sigma - S0
-            S_hat  = np.fft.rfft(s, n=self.Nx)
+
+            S_hat  = np.fft.rfft(s,  n=self.Nx)
             vx_hat = np.fft.rfft(vx, n=self.Nx)
             vy_hat = np.fft.rfft(vy, n=self.Nx)
             uy_hat = np.fft.rfft(uy, n=self.Nx)
-            self.Xhat[:, 0] = S_hat
-            self.Xhat[:, 1] = vx_hat
-            self.Xhat[:, 2] = vy_hat
-            self.Xhat[:, 3] = uy_hat
+
+            if self.nvar == 3:
+                # dust-only: [S, vx, vy]
+                self.Xhat[:, 0] = S_hat
+                self.Xhat[:, 1] = vx_hat
+                self.Xhat[:, 2] = vy_hat
+            else:
+                # dust+gas: [S, vx, vy, uy]
+                self.Xhat[:, 0] = S_hat
+                self.Xhat[:, 1] = vx_hat
+                self.Xhat[:, 2] = vy_hat
+                self.Xhat[:, 3] = uy_hat
+
             self.writer.write_metric({"t": 0.0, "note": "init_from_file"})
             return
 

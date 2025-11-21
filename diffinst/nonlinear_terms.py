@@ -10,101 +10,29 @@ def _p(params, a, b=None, default=None):
     return default
 
 
-def smooth_gaussian(f: np.ndarray, Lx: float, frac: float = 0.25):
-    """
-    Spectral Gaussian smoother:
-        f_smooth = IFFT[ exp(-(k/kc)^2) * FFT[f] ]
-
-    Parameters
-    ----------
-    f : ndarray (real)
-    Lx : domain size
-    frac : fraction of Nyquist frequency at which the Gaussian is ~exp(-1)
-
-    Returns
-    -------
-    ndarray : smoothed field, same shape
-    """
-    Nx = f.size
-    dk = 2.0 * np.pi / Lx
-    k = dk * np.fft.fftfreq(Nx)       # full symmetric k-array
-    k_nyq = np.max(np.abs(k))
-    k_c = frac * k_nyq                # characteristic cutoff
-
-    g = np.exp(-(k / k_c)**2)         # Gaussian filter
-    F = np.fft.fft(f)
-    f_smooth = np.fft.ifft(F * g).real
-    return f_smooth
-
-def _validate_closure(Sigma_eff, S0, D_raw, nu_raw, where="compute_D_nu"):
-    """Debug helper: raise with useful diagnostics if closures misbehave."""
-    problems = []
-
-    if not np.all(np.isfinite(Sigma_eff)):
-        problems.append("Sigma_eff has non-finite values")
-
-    ratio = Sigma_eff / S0
-    if np.any(ratio <= 0):
-        problems.append("Sigma_eff/S0 has non-positive values")
-
-    if not np.all(np.isfinite(D_raw)):
-        problems.append("D_raw has non-finite values")
-    if not np.all(np.isfinite(nu_raw)):
-        problems.append("nu_raw has non-finite values")
-
-    if problems:
-        msg = (
-            f"[{where}] closure diagnostic failed:\n"
-            f"  issues: {', '.join(problems)}\n"
-            f"  Sigma_eff: min={Sigma_eff.min():.3e}, max={Sigma_eff.max():.3e}\n"
-            f"  D_raw:     min={np.nanmin(D_raw):.3e}, max={np.nanmax(D_raw):.3e}\n"
-            f"  nu_raw:    min={np.nanmin(nu_raw):.3e}, max={np.nanmax(nu_raw):.3e}"
-        )
-        raise FloatingPointError(msg)
-
-
 def compute_D_nu(Sigma: np.ndarray, params: dict):
     """
-    Compute diffusion & viscosity closures using a *smoothed* Sigma_eff.
-
-    Steps:
-      (1) Smooth Sigma spectrally
-      (2) Enforce floor
-      (3) Compute power-law closures
-      (4) Validate
-      (5) Clip to reasonable bandwidth around (D0, nu0)
+    Compute diffusion and viscosity coefficients D, nu from the power-law closures:
+        D  = D0  * (Sigma/S0)**beta_diff
+        nu = nu0 * (Sigma/S0)**beta_visc
+    with only a tiny floor to avoid literal division by zero.
     """
-    S0 = float(params.get("S0", float(np.mean(Sigma))))
-    D0 = float(_p(params, "D0", "D_0", 0.0))
-    nu0 = float(_p(params, "nu0", "nu_0", 0.0))
+    S0        = float(params.get("S0", float(np.mean(Sigma))))
+    D0        = float(_p(params, "D0", "D_0", 0.0))
+    nu0       = float(_p(params, "nu0", "nu_0", 0.0))
     beta_diff = float(params.get("beta_diff", 0.0))
     beta_visc = float(params.get("beta_visc", 0.0))
-    Lx = float(params.get("Lx", 1.0))        # require Lx in params
-    smooth_frac = float(params.get("closure_smooth_frac", 0.2))
 
-    # --- (1) Smooth Sigma using spectral Gaussian ---
-    Sigma_smooth = smooth_gaussian(Sigma, Lx, frac=smooth_frac)
+    # tiny floor purely for numeric safety; this does *not* regularize the model,
+    # it only avoids divide-by-zero if Sigma hits exactly 0
+    sigma_floor = 1e-14 * max(S0, 1.0)
+    Sigma_safe = np.where(Sigma > sigma_floor, Sigma, sigma_floor)
 
-    # --- (2) Enforce a positive floor ---
-    sigma_floor = 1e-12 * max(S0, 1.0)
-    Sigma_eff = np.maximum(Sigma_smooth, sigma_floor)
-
-    ratio = Sigma_eff / S0
-
-    # --- (3) Power-law closures ---
+    ratio = Sigma_safe / S0
     D_raw  = D0  * ratio**beta_diff
     nu_raw = nu0 * ratio**beta_visc
 
-    # --- (4) Validation BEFORE clipping ---
-    _validate_closure(Sigma_eff, S0, D_raw, nu_raw, where="compute_D_nu")
-
-    # --- (5) Clip to reasonable ranges ---
-    clip_lo = 1e-3
-    clip_hi = 1e3
-    D = np.clip(D_raw,  clip_lo * D0, clip_hi * D0) if D0 != 0 else D_raw
-    nu = np.clip(nu_raw, clip_lo * nu0, clip_hi * nu0) if nu0 != 0 else nu_raw
-
-    return D, nu
+    return D_raw, nu_raw
 
 
 def rhs(state: dict, params: dict, ops):
@@ -117,16 +45,18 @@ def rhs(state: dict, params: dict, ops):
     Gas (axisymmetric incompressible, ux*=0):
       duy/dt = (ε/ts)(vy - uy) + νg lap(uy)
 
-    Rx = -(1/Σ) d/dx[ (D^2/Σ) (dΣ/dx)^2 ] - (vx/ts)
-         - (1/Σ)(2+βdiff)(D/ts) dΣ/dx
-         + (4/3)(1/Σ) d/dx[ ν Σ d/dx( vx + (D/Σ) dΣ/dx ) ]
-
-    Ry = (uy - vy)/ts + (1/Σ) d/dx[ ν Σ ( dvy/dx - qΩ ) ]
+    If 'uy' is missing from state or is None, we interpret this as a
+    dust-only model: we still allow dust to feel drag against a
+    *fixed* gas background (uy = 0), but we do not evolve a gas equation.
     """
+
     Sigma = state["Sigma"]
     vx        = state["vx"]
     vy        = state["vy"]
-    uy        = state["uy"]  # always present
+
+    has_gas = ("uy" in state) and (state["uy"] is not None)
+    uy      = state["uy"] if has_gas else np.zeros_like(Sigma)
+
 
     Omega = float(params.get("Omega", 0.0))
     q     = float(params.get("q", 1.5))
@@ -157,10 +87,18 @@ def rhs(state: dict, params: dict, ops):
     term_visc_y = invS * ops.dx(nu * Sigma * (ops.dx(vy) - q * Omega))
     dvy_dt = -vx * ops.dx(vy) - (2.0 - q) * Omega * vx + term_drag_y + term_visc_y
 
-    # uy equation (gas closure)
-    duy_dt = (eps / ts) * (vy - uy) + nu_g * ops.lap(uy)
+    out = {
+        "Sigma": dSigma_dt,
+        "vx":    dvx_dt,
+        "vy":    dvy_dt,
+    }
 
-    return {"Sigma": dSigma_dt, "vx": dvx_dt, "vy": dvy_dt, "uy": duy_dt}
+    # Gas uy equation only if present
+    if has_gas:
+        duy_dt = (eps / ts) * (vy - uy) + nu_g * ops.lap(uy)
+        out["uy"] = duy_dt
+
+    return out
 
 
 def rhs_split(state: dict, params: dict, ops):
@@ -169,19 +107,28 @@ def rhs_split(state: dict, params: dict, ops):
       implicit (frozen each step):
         vx: (4/3) * nu_bar * lap(vx)
         vy: nu_bar * lap(vy)
-        uy: nu_g * lap(uy)
+        uy: nu_g * lap(uy)   [only if gas is present]
+
       explicit: all remaining variable-coefficient and nonlinear terms.
+
+    If 'uy' is missing or None, we treat it as dust-only:
+      - no stiff uy term (uy not in `stiff`)
+      - rhs() does not return 'uy'.
     """
     Sigma = state["Sigma"]
+    has_gas = ("uy" in state) and (state["uy"] is not None)
+
     S0    = float(params.get("S0", float(np.mean(Sigma))))
     nu0   = float(_p(params, "nu0", "nu_0", 0.0))
     nu_bar = nu0  # freeze at Sigma ~ S0
 
     stiff = {
         "Sigma": 0.0,
-        "vx": (4.0 / 3.0) * nu_bar,
-        "vy": nu_bar,
-        "uy": float(params.get("nu_g", 0.0)),
+        "vx":    (4.0 / 3.0) * nu_bar,
+        "vy":    nu_bar,
     }
+    if has_gas:
+        stiff["uy"] = float(params.get("nu_g", 0.0))
+
     full = rhs(state, params, ops)
     return full, stiff

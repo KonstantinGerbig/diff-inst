@@ -44,10 +44,13 @@ class NonlinearNative:
 
     def __init__(self, cfg: Config, outdir: Path, args: NonlinearRunArgs,
                  grid: Grid1D | None = None,
-                 writer: StreamWriter | None = None):
+                 writer: StreamWriter | None = None,
+                 enable_gas = True):
         self.cfg = cfg
         self.outdir = Path(outdir); self.outdir.mkdir(parents=True, exist_ok=True)
         self.args = args
+
+        self.enable_gas = bool(enable_gas)
 
         # grid
         if grid is None:
@@ -93,17 +96,24 @@ class NonlinearNative:
         S0   = float(getattr(self.cfg, "S0", getattr(self.cfg, "sig_0", 1.0)))
         amp  = float(self.args.amp)
         k0   = int(self.args.k0)
-        x = self.x
+        x    = self.x
+        use_gas = self.enable_gas
 
+        # ---------- Case 1: init_state provided ----------
         if init_state is not None:
-            # Use provided arrays directly
-            return {
-                "Sigma": np.asarray(init_state["Sigma"]),
-                "vx":    np.asarray(init_state["vx"]),
-                "vy":    np.asarray(init_state["vy"]),
-                "uy":    np.asarray(init_state["uy"]),
-            }
+            Sigma = np.asarray(init_state["Sigma"])
+            vx    = np.asarray(init_state["vx"])
+            vy    = np.asarray(init_state["vy"])
 
+            if use_gas:
+                # if uy missing in file, just use zeros
+                uy = np.asarray(init_state.get("uy", np.zeros_like(Sigma)))
+                return {"Sigma": Sigma, "vx": vx, "vy": vy, "uy": uy}
+            else:
+                # dust-only: ignore any uy in file
+                return {"Sigma": Sigma, "vx": vx, "vy": vy}
+
+        # ---------- Case 2: seed_mode == "eigen" ----------
         if self.args.seed_mode == "eigen" and (self.args.k_phys is not None):
             k_phys = float(self.args.k_phys)
 
@@ -119,25 +129,28 @@ class NonlinearNative:
 
             # normalize
             if self.args.amp_is_physical:
-                if self.args.amp_metric == "rms":
-                    a_now = float(np.sqrt(np.mean(S_raw**2)))
-                else:
-                    a_now = float(np.max(np.abs(S_raw)))
+                a_now = (np.sqrt(np.mean(S_raw**2))
+                         if self.args.amp_metric == "rms"
+                         else np.max(np.abs(S_raw)))
                 scale = (amp / max(a_now, 1e-30)) if a_now != 0 else 0.0
             else:
-                # interpret amp as fractional of S0 (physical amplitude = amp * S0)
                 a_target = amp * S0
-                if self.args.amp_metric == "rms":
-                    a_now = float(np.sqrt(np.mean(S_raw**2)))
-                else:
-                    a_now = float(np.max(np.abs(S_raw)))
+                a_now = (np.sqrt(np.mean(S_raw**2))
+                         if self.args.amp_metric == "rms"
+                         else np.max(np.abs(S_raw)))
                 scale = (a_target / max(a_now, 1e-30)) if a_now != 0 else 0.0
 
             Sigma = S0 + scale * S_raw
             vx    = scale * vx_raw
             vy    = scale * vy_raw
-            uy    = scale * uy_raw
-        
+
+            if use_gas:
+                uy = scale * uy_raw
+                return {"Sigma": Sigma, "vx": vx, "vy": vy, "uy": uy}
+            else:
+                return {"Sigma": Sigma, "vx": vx, "vy": vy}
+
+        # ---------- Case 3: seed_mode == "noise" ----------
         elif self.args.seed_mode == "noise":
             if self.args.amp_is_physical:
                 amp_phys = self.args.amp
@@ -145,23 +158,28 @@ class NonlinearNative:
                 amp_phys = self.args.amp * S0
 
             Sigma = S0 + amp_phys * rng.standard_normal(self.Nx)
-            vx = np.zeros_like(Sigma)
-            vy = np.zeros_like(Sigma)
-            uy = np.zeros_like(Sigma)
-
-        elif self.args.seed_mode == "cos":
-            phase = 0.0
-            if self.args.amp_is_physical:
-                amp_phys = amp
+            vx    = np.zeros_like(Sigma)
+            vy    = np.zeros_like(Sigma)
+            if use_gas:
+                uy = np.zeros_like(Sigma)
+                return {"Sigma": Sigma, "vx": vx, "vy": vy, "uy": uy}
             else:
-                amp_phys = amp * S0
+                return {"Sigma": Sigma, "vx": vx, "vy": vy}
+
+        # ---------- Case 4: seed_mode == "cos" (default) ----------
+        else:  # "cos"
+            phase = 0.0
+            amp_phys = amp if self.args.amp_is_physical else amp * S0
 
             Sigma = S0 + amp_phys * np.cos(k0 * 2.0*np.pi*(x - x.min())/self.Lx + phase)
-            vx = np.zeros_like(Sigma)
-            vy = np.zeros_like(Sigma)
-            uy = np.zeros_like(Sigma)
-
-        return {"Sigma": Sigma, "vx": vx, "vy": vy, "uy": uy}
+            vx    = np.zeros_like(Sigma)
+            vy    = np.zeros_like(Sigma)
+            if use_gas:
+                uy = np.zeros_like(Sigma)
+                return {"Sigma": Sigma, "vx": vx, "vy": vy, "uy": uy}
+            else:
+                return {"Sigma": Sigma, "vx": vx, "vy": vy}
+            
 
     def _params(self) -> dict:
         if not hasattr(self.cfg, "ts"):
@@ -181,6 +199,8 @@ class NonlinearNative:
             ts=float(getattr(self.cfg, "ts", 1.0)),
             eps=float(getattr(self.cfg, "eps", getattr(self.cfg, "epsilon", 0.0))),
             nu_g=float(getattr(self.cfg, "nu_g", 0.0)),
+            # flags
+            enable_gas=self.enable_gas,
         )
 
     # IMEX RK2 using rhs_split (same structure; now includes uy)
