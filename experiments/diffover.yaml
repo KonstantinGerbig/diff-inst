@@ -1,17 +1,16 @@
-# Unstable baseline for EVP/time-domain growth figures
-# Matches the diffusion-slope branch (small τ_s; β_diff < -2)
+# overstability driven by viscosity-slope branch (large τ_s; β_diff > 0 (?))
 
-beta_diff: -2.5
-beta_visc: -2.5
-ts: 0.1
+beta_diff: 0.8
+beta_visc: 0.8
+ts: 100
 D_0: 1.0e-5
 nu_0: 1.0e-5
-nu_g: 1.0e-3
-eps: 1000.0
+nu_g: 1.0e-4
+eps: 1.0
 q: 1.5
 
 # gas
-enable_gas: false   # or false
+enable_gas: true   # or false
 
 # grid / domain
 Nx: 128
