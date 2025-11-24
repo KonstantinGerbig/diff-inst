@@ -47,7 +47,7 @@ def main():
                     help="Override YAML solver.backend for this run.")
 
     ap.add_argument("--mode", choices=["nonlinear"], default=None)
-    ap.add_argument("--stop_time", type=float, default=10.0,
+    ap.add_argument("--stop-time", type=float, default=10.0,
                     help="Total integration time (code units).")
     ap.add_argument("--dt", type=float, default=1e-3)
     ap.add_argument("--save-stride", type=int, default=100)

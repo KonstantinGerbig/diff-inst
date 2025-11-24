@@ -5,6 +5,7 @@ import numpy as np
 from pathlib import Path
 from diffinst import Config
 from diffinst.runtime import run_linear_native
+import shutil
 
 
 def main():
@@ -16,7 +17,7 @@ def main():
     # linear mode
     ap.add_argument("--mode", choices=["linear"], default=None,
                     help="Select run mode. 'linear' uses the native spectral harness.")
-    ap.add_argument("--stop_time", type=float, default=10.0)
+    ap.add_argument("--stop-time", type=float, default=10.0)
     ap.add_argument("--dt", type=float, default=1e-2)
     ap.add_argument("--save-stride", type=int, default=50)
     ap.add_argument("--k", type=float, default=None,
@@ -30,10 +31,18 @@ def main():
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--init-from", type=str, default=None,
                 help="Path to .npz with arrays Sigma,vx,vy,uy to use as initial state.")
+    
+    ap.add_argument("--force", action="store_true",
+                    help="Delete the output directory if it already exists.")
 
     args = ap.parse_args()
     cfg = Config.from_yaml(args.config)
     outdir = Path(args.outdir); outdir.mkdir(parents=True, exist_ok=True)
+    # force delete existing directory
+    if outdir.exists() and args.force:
+        print(f"[INFO] Removing existing output directory: {outdir}")
+        shutil.rmtree(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
 
     init_state = None
     if args.init_from:

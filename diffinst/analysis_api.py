@@ -204,3 +204,31 @@ def load_nonlinear_amplitude(run_dir: Path | str, k_phys: float) -> Tuple[np.nda
     T, Sigma = load_nonlinear_Sigma_series(files)
     k_idx = nearest_k_index(Lx, Nx, k_phys)
     return amplitude_series_from_sigma(T, Sigma, k_idx)
+
+# ---------- safe loader helpers for amplitudes ----------
+
+def safe_load_amplitude(
+    loader,
+    run_dir: Optional[Path | str],
+    k_phys: float,
+    label: str = "",
+):
+    """
+    Wrapper for analysis_api.load_*_amplitude functions that:
+
+      - returns None if run_dir is None or missing
+      - catches exceptions and prints a short message
+      - always returns (T, A) as numpy arrays, or None
+    """
+    if run_dir is None:
+        return None
+    run_dir = Path(run_dir)
+    if not run_dir.exists():
+        print(f"[safe_load_amplitude] {label}: run dir {run_dir} does not exist, skipping.")
+        return None
+    try:
+        T, A = loader(run_dir, k_phys)
+        return np.asarray(T), np.asarray(A)
+    except Exception as e:
+        print(f"[safe_load_amplitude] {label}: failed for {run_dir}: {e}")
+        return None
