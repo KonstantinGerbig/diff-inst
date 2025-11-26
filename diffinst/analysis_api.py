@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import json
 import numpy as np
-from typing import Tuple, List, Dict, Iterable, Optional
+from typing import Tuple, List, Dict, Iterable, Optional, Callable
 from . import Config
 from .linear_ops import evp_solve_at_k
 
@@ -207,28 +207,79 @@ def load_nonlinear_amplitude(run_dir: Path | str, k_phys: float) -> Tuple[np.nda
 
 # ---------- safe loader helpers for amplitudes ----------
 
-def safe_load_amplitude(
-    loader,
-    run_dir: Optional[Path | str],
-    k_phys: float,
-    label: str = "",
-):
+def safe_load_amplitude(loader_func, run_dir: Path | str | None, k_phys: float):
     """
-    Wrapper for analysis_api.load_*_amplitude functions that:
-
-      - returns None if run_dir is None or missing
-      - catches exceptions and prints a short message
-      - always returns (T, A) as numpy arrays, or None
+    Wrapper around load_linear_amplitude / load_nonlinear_amplitude that
+    returns None if the run directory is missing or the loader fails.
     """
     if run_dir is None:
         return None
     run_dir = Path(run_dir)
     if not run_dir.exists():
-        print(f"[safe_load_amplitude] {label}: run dir {run_dir} does not exist, skipping.")
         return None
     try:
-        T, A = loader(run_dir, k_phys)
-        return np.asarray(T), np.asarray(A)
+        return loader_func(run_dir, k_phys)
     except Exception as e:
-        print(f"[safe_load_amplitude] {label}: failed for {run_dir}: {e}")
+        print(f"[safe_load_amplitude] failed for {run_dir}: {e}")
         return None
+
+
+# ---------- mode-series loaders for hodographs ----------
+
+def _k_index_for_run(run_dir: Path | str, k_phys: float) -> int:
+    """
+    Helper: given a run directory and physical k, return the rfft-bin index.
+    Works for both linear and nonlinear runs (uses Nx, Lx from manifest).
+    """
+    run_dir = Path(run_dir)
+    man = load_manifest(run_dir)
+    Nx = int(man["Nx"]); Lx = float(man["Lx"])
+    return nearest_k_index(Lx, Nx, k_phys)
+
+
+def load_mode_series_linear(run_dir: Path | str, k_phys: float):
+    """
+    For a linear TD run, return:
+        T, vx_k(T), vy_k(T)
+    where vx_k, vy_k are the complex Fourier coefficients of mode k_phys.
+    """
+    run_dir = Path(run_dir)
+    Nx, Lx, files, _, _, _, _ = load_linear_run(run_dir)
+    k_idx = nearest_k_index(Lx, Nx, k_phys)
+
+    T_list, vxk_list, vyk_list = [], [], []
+    for fn in files:
+        with np.load(fn) as Z:
+            T_list.append(float(Z["t"]))
+            Xhat = Z["Xhat"]  # shape (Nk, 4)
+            vx_hat = Xhat[:, 1]
+            vy_hat = Xhat[:, 2]
+            vxk_list.append(vx_hat[k_idx])
+            vyk_list.append(vy_hat[k_idx])
+
+    return np.array(T_list), np.array(vxk_list), np.array(vyk_list)
+
+
+def load_mode_series_nonlinear(run_dir: Path | str, k_phys: float):
+    """
+    For a nonlinear TD run (native or Dedalus), return:
+        T, vx_k(T), vy_k(T)
+    where vx_k, vy_k are the complex Fourier coefficients of mode k_phys
+    computed from x-space fields.
+    """
+    run_dir = Path(run_dir)
+    Nx, Lx, files, _ = load_nonlinear_run(run_dir)
+    k_idx = nearest_k_index(Lx, Nx, k_phys)
+
+    T_list, vxk_list, vyk_list = [], [], []
+    for fn in files:
+        with np.load(fn) as Z:
+            T_list.append(float(Z["t"]))
+            vx = np.asarray(Z["vx"])
+            vy = np.asarray(Z["vy"])
+            vx_hat = np.fft.rfft(vx)
+            vy_hat = np.fft.rfft(vy)
+            vxk_list.append(vx_hat[k_idx])
+            vyk_list.append(vy_hat[k_idx])
+
+    return np.array(T_list), np.array(vxk_list), np.array(vyk_list)
