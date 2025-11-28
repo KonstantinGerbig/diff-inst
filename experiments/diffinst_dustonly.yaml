@@ -1,0 +1,32 @@
+# diffusion-slope branch (small τ_s; β_diff < -2)
+
+beta_diff: -2.4
+beta_visc: -2.4
+ts: 0.2
+D_0: 1.0e-5
+nu_0: 1.0e-5
+nu_g: 1.0e-4
+eps: 1.0
+q: 1.5
+
+# gas
+enable_gas: false   # or false
+
+# grid / domain
+Nx: 128
+Lx: 0.2
+exact_fit:
+  enable: true
+  K_target: 100.0
+  harmonics: 2
+
+# run control (used by time-domain scripts later)
+stop_time: 20.0
+max_dt: 1.0e-2
+min_dt: 5.0e-4
+save_stride: 50
+log_stride: 50
+
+# backend selection (IVP only; EVP ignores this)
+solver:
+  backend: native
