@@ -283,3 +283,32 @@ def load_mode_series_nonlinear(run_dir: Path | str, k_phys: float):
             vyk_list.append(vy_hat[k_idx])
 
     return np.array(T_list), np.array(vxk_list), np.array(vyk_list)
+
+
+# ---------- nonlinear diagnostics ----------
+
+def max_sigma_series(run_dir: Path | str) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Return time series of the maximum surface density from a nonlinear run.
+
+    Parameters
+    ----------
+    run_dir : path-like
+        Directory containing checkpoints and run.json for a nonlinear run.
+
+    Returns
+    -------
+    T : np.ndarray
+        Times of the checkpoints.
+    Sig_max : np.ndarray
+        max_x Sigma(x, t) at each checkpoint.
+    """
+    run_dir = Path(run_dir)
+    Nx, Lx, files, _ = load_nonlinear_run(run_dir)
+    if not files:
+        return np.array([]), np.array([])
+    T, Sig = load_nonlinear_Sigma_series(files)
+    if T.size == 0:
+        return T, np.array([])
+    Sig_max = np.max(Sig, axis=1)
+    return T, Sig_max
