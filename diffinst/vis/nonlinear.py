@@ -13,8 +13,11 @@ from ..analysis_api import (
     load_nonlinear_run,
     load_nonlinear_Sigma_series,
 )
+from diffinst.linear_ops import evp_solve_at_k
 
 from matplotlib.gridspec import GridSpec
+
+from .. import Config
 
 def plot_sigma_max_vs_time(
     branches: Dict[str, Dict[str, Optional[Path | str]]],
@@ -460,3 +463,287 @@ def plot_sigma_max_and_snapshots(
 
     #fig.tight_layout()
     return fig, (ax_left, ax_top, ax_bot)
+
+
+
+def plot_noise_two_res_summary(
+    run_low: Path | str,
+    run_high: Path | str,
+    label_low: str = r"$N_x^\mathrm{(low)}$",
+    label_high: str = r"$N_x^\mathrm{(high)}$",
+    k_ref: float | None = None,
+    n_snap: int = 4,
+    figsize=(10, 3.5),
+):
+    """
+    Summary figure for a noise run at two different resolutions (both native):
+
+      - Left panel: max_x Sigma(x,t) vs t for low and high resolution,
+                    plus an optional EVP envelope using gamma(k_ref).
+      - Middle panel: Sigma(x,t) snapshots (low resolution).
+      - Right panel: Sigma(x,t) snapshots (high resolution).
+
+    Parameters
+    ----------
+    run_low, run_high : path-like
+        Nonlinear noise run directories (native backend) for low/high Nx.
+
+    label_low, label_high : str
+        Legend labels for the two resolutions.
+
+    k_ref : float or None
+        If provided, compute gamma(k_ref) from EVP and overlay linear-growth
+        envelope for max_x Sigma using the low-res time series.
+
+    n_snap : int
+        Number of snapshots to show in each snapshot panel.
+
+    figsize : tuple
+        Overall figure size.
+    """
+    run_low = Path(run_low)
+    run_high = Path(run_high)
+
+    # ---------- load low-res ----------
+    Nx_lo, Lx_lo, files_lo, man_lo = load_nonlinear_run(run_low)
+    T_lo, Sig_lo = load_nonlinear_Sigma_series(files_lo)
+    if T_lo.size == 0:
+        raise ValueError(f"No data in low-res run {run_low}")
+
+    with np.load(files_lo[0]) as Z0:
+        x_lo = np.asarray(Z0["x"])
+
+    Smax_lo = np.nanmax(Sig_lo, axis=1)
+
+    # ---------- load high-res ----------
+    Nx_hi, Lx_hi, files_hi, man_hi = load_nonlinear_run(run_high)
+    T_hi, Sig_hi = load_nonlinear_Sigma_series(files_hi)
+    if T_hi.size == 0:
+        raise ValueError(f"No data in high-res run {run_high}")
+
+    with np.load(files_hi[0]) as Z1:
+        x_hi = np.asarray(Z1["x"])
+
+    Smax_hi = np.nanmax(Sig_hi, axis=1)
+
+    # ---------- figure layout ----------
+    fig = plt.figure(figsize=figsize)
+    gs = GridSpec(
+        1, 3,
+        width_ratios=[1.1, 1.0, 1.0],
+        wspace=0.3,
+        figure=fig,
+    )
+
+    ax_left  = fig.add_subplot(gs[0, 0])
+    ax_mid   = fig.add_subplot(gs[0, 1])
+    ax_right = fig.add_subplot(gs[0, 2])
+
+    # ---------- left: max Σ vs t (+ EVP envelope) ----------
+    ax_left.plot(T_lo, Smax_lo, color="C0", lw=2, label=label_low)
+    ax_left.plot(T_hi, Smax_hi, color="C1", lw=2, ls="--", label=label_high)
+
+    # EVP envelope using low-res config/time series
+    if k_ref is not None:
+        try:
+            cfg = load_config_from_run(run_low)
+            Sig0 = float(getattr(cfg, "sig_0", getattr(cfg, "S0", 1.0)))
+            dSig0 = float(Smax_lo[0] - Sig0)
+
+            w, _ = evp_solve_at_k(cfg, float(k_ref))
+            gamma = float(w[0].real)
+            t0 = float(T_lo[0])
+            Sig_lin = Sig0 + dSig0 * np.exp(gamma * (T_lo - t0))
+
+            ax_left.plot(
+                T_lo, Sig_lin,
+                color="k", ls=":", lw=1.5,
+                label=rf"EVP, $\gamma(k_\mathrm{{ref}})={gamma:.3g}$",
+            )
+        except Exception as e:
+            print(f"[plot_noise_two_res_summary] EVP overlay failed: {e}")
+
+    ax_left.set_yscale("log")
+    ax_left.set_xlabel(r"$t\Omega^{-1}$")
+    ax_left.set_ylabel(r"$\max_x \Sigma(x,t)$")
+    ax_left.set_title("Noise-driven growth (two resolutions)")
+    ax_left.legend(frameon=False, fontsize=8)
+    ax_left.set(xlim = (T_lo[0], T_lo[-1]))
+
+    # ---------- choose snapshot times (finite) ----------
+    def _choose_snapshots(T, Sig, n):
+        finite = np.all(np.isfinite(Sig), axis=1)
+        T_f = T[finite]
+        Sig_f = Sig[finite]
+        if T_f.size == 0:
+            return np.array([]), np.empty((0,) + Sig.shape[1:])
+        idx = np.linspace(0, len(T_f) - 1, n).astype(int)
+        return T_f[idx], Sig_f[idx]
+
+    T_snap_lo, Sig_snap_lo = _choose_snapshots(T_lo, Sig_lo, n_snap)
+    T_snap_hi, Sig_snap_hi = _choose_snapshots(T_hi, Sig_hi, n_snap)
+
+    cmap = plt.get_cmap("viridis")
+
+    # ---------- middle: low-res snapshots ----------
+    for j, (tt, Sx) in enumerate(zip(T_snap_lo, Sig_snap_lo)):
+        frac = 0.1 + 0.8 * (j / max(1, n_snap - 1))
+        col = cmap(frac)
+        ax_mid.plot(x_lo, Sx, color=col, lw=1.5,
+                    label=fr"$t={tt:.1f}\,\Omega^{{-1}}$")
+
+    ax_mid.set_xlabel(r"$x$")
+    ax_mid.set_ylabel(r"$\Sigma(x,t)$")
+    ax_mid.set_title(rf"Snapshots, {label_low}")
+    ax_mid.legend(frameon=False, fontsize=7)
+    ax_mid.set(xlim = (x_lo[0], x_lo[-1]))
+
+    # ---------- right: high-res snapshots ----------
+    for j, (tt, Sx) in enumerate(zip(T_snap_hi, Sig_snap_hi)):
+        frac = 0.1 + 0.8 * (j / max(1, n_snap - 1))
+        col = cmap(frac)
+        ax_right.plot(x_hi, Sx, color=col, lw=1.5,
+                      label=fr"$t={tt:.1f}\,\Omega^{{-1}}$")
+
+    ax_right.set_xlabel(r"$x$")
+    ax_right.set_ylabel(r"$\Sigma(x,t)$")
+    ax_right.set_title(rf"Snapshots, {label_high}")
+    ax_right.legend(frameon=False, fontsize=7)
+    ax_right.set(xlim = (x_hi[0], x_hi[-1]))
+
+    fig.tight_layout()
+    return fig, (ax_left, ax_mid, ax_right)
+
+
+
+
+
+
+def plot_noise_dominant_mode_vs_theory(
+    run_low: Path | str,
+    run_high: Path | str,
+    cfg_path: Path | str,
+    kmin: float = 10.0,
+    kmax: float = 5e3,
+    nk: int = 120,
+    amp_floor: float = 1e-6,
+    figsize=(10, 3.5),
+):
+    """
+    Compare the 'winning' dominant mode in noise runs against the
+    theoretically fastest-growing mode from EVP.
+
+    Left panel:
+        γ(k) vs k from an EVP sweep, with the maximum γ highlighted.
+
+    Right panel:
+        For both low- and high-resolution noise runs, track the dominant
+        Fourier mode k_dom(t) (max amplitude over k>0 at each time),
+        and compare to k_max from the EVP sweep.
+
+    Parameters
+    ----------
+    run_low, run_high : path-like
+        Nonlinear noise run directories (native) for low/high Nx.
+
+    cfg_path : path-like
+        YAML config for the EVP sweep (same physics as the runs).
+
+    kmin, kmax : float
+        Min/max k for the EVP sweep (log-spaced).
+
+    nk : int
+        Number of k points in the EVP sweep.
+
+    amp_floor : float
+        If the maximum Fourier amplitude at a time step is below amp_floor,
+        that time is treated as 'no dominant mode' (value set to NaN).
+
+    figsize : tuple
+        Figure size.
+    """
+    run_low = Path(run_low)
+    run_high = Path(run_high)
+    cfg_path = Path(cfg_path)
+    cfg = Config.from_yaml(cfg_path)
+
+    # ---------- EVP sweep ----------
+    ks = np.logspace(np.log10(kmin), np.log10(kmax), nk)
+    growth = np.empty_like(ks)
+    for i, k in enumerate(ks):
+        w, _ = evp_solve_at_k(cfg, float(k))
+        growth[i] = w[0].real
+
+    imax = int(np.argmax(growth))
+    k_max = float(ks[imax])
+    gamma_max = float(growth[imax])
+
+    # ---------- helper: dominant mode from a run ----------
+    def _dominant_k_series(run_dir: Path | str):
+        Nx, Lx, files, _ = load_nonlinear_run(run_dir)
+        T, Sig = load_nonlinear_Sigma_series(files)
+        if T.size == 0:
+            raise ValueError(f"No data in {run_dir}")
+
+        # physical k-grid
+        dx = Lx / Nx
+        k_grid = 2.0 * np.pi * np.fft.rfftfreq(Nx, d=dx)  # shape (Nk,)
+
+        Nk = k_grid.size
+        k_dom = np.full_like(T, np.nan, dtype=float)
+
+        for i_t, Sx in enumerate(Sig):
+            s = Sx - np.mean(Sx)
+            ak = np.fft.rfft(s) / s.size
+            # amplitude for k>0
+            amps = 2.0 * np.abs(ak[1:])  # skip k=0
+            if amps.size == 0:
+                continue
+            a_max = np.max(amps)
+            if a_max < amp_floor:
+                continue  # leave k_dom as NaN (no clear dominant mode yet)
+            j = int(np.argmax(amps)) + 1  # shift by 1 because we skipped k=0
+            k_dom[i_t] = k_grid[j]
+
+        return T, k_dom
+
+    # low-res
+    T_lo, kdom_lo = _dominant_k_series(run_low)
+    # high-res
+    T_hi, kdom_hi = _dominant_k_series(run_high)
+
+    # ---------- figure layout ----------
+    fig = plt.figure(figsize=figsize)
+    gs = GridSpec(1, 2, width_ratios=[1.1, 1.0], wspace=0.3, figure=fig)
+
+    ax_left = fig.add_subplot(gs[0, 0])
+    ax_right = fig.add_subplot(gs[0, 1])
+
+    # --- left: γ(k) vs k with k_max ---
+    ax_left.plot(ks, growth, color="C0", lw=2)
+    ax_left.axvline(k_max, color="k", ls="--", lw=1.5,
+                    label=rf"$k_\mathrm{{max}}\approx {k_max:.1f}$")
+    ax_left.set_xscale("log")
+    ax_left.set_yscale("log")
+    ax_left.set_xlabel(r"$k$")
+    ax_left.set_ylabel(r"$\gamma(k)$")
+    ax_left.set_title("EVP growth rates")
+    ax_left.legend(frameon=False, fontsize=8)
+
+    # --- right: dominant k(t) from noise runs ---
+    ax_right.plot(T_lo, kdom_lo, color="C0", lw=1.5, marker="o",
+                  ms=2, label=r"$N_x^\mathrm{(low)}$")
+    ax_right.plot(T_hi, kdom_hi, color="C1", lw=1.5, marker="s",
+                  ms=2, label=r"$N_x^\mathrm{(high)}$")
+
+    ax_right.axhline(k_max, color="k", ls="--", lw=1.5,
+                     label=rf"EVP $k_\mathrm{{max}}$")
+
+    ax_right.set_xlabel(r"$t\Omega^{-1}$")
+    ax_right.set_ylabel(r"$k_\mathrm{dom}(t)$")
+    ax_right.set_title("Dominant mode in noise runs")
+    ax_right.legend(frameon=False, fontsize=8)
+    ax_right.set(yscale="log")
+
+    fig.tight_layout()
+    return fig, (ax_left, ax_right)
