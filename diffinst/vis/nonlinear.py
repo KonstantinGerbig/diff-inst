@@ -17,6 +17,8 @@ from diffinst.linear_ops import evp_solve_at_k
 
 from matplotlib.gridspec import GridSpec
 
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+
 from .. import Config
 
 def plot_sigma_max_vs_time(
@@ -137,7 +139,7 @@ def plot_sigma_max_vs_time(
 
     ax.set(xlim =(T_ref[0], T_ref[-1]))
     ax.set_yscale("log")
-    ax.set_xlabel(r"$t\Omega^{-1}$")
+    ax.set_xlabel(r"$t[\Omega^{-1}]$")
     ax.set_ylabel(r"$\max_x \Sigma(x,t)$")
     #ax.grid(True, which="both", alpha=0.3)
     ax.legend(frameon=False, fontsize=8)
@@ -213,7 +215,7 @@ def plot_sigma_snapshots(
     for j, (tt, Sx) in enumerate(zip(T_snap, Sig_snap)):
         frac = 0.1 + 0.8 * (j / max(1, n_snap - 1))
         col = cmap(frac)
-        ax.plot(x, Sx, color=col, label=fr"$t = {tt:.1f}\,\Omega^{{-1}}$")
+        ax.plot(x, Sx, color=col, label=fr"$t = {tt:.1f}\,[\Omega^{{-1}}]$")
 
     ax.set_xlabel(r"$x$")
     ax.set_ylabel(r"$\Sigma(x,t)$")
@@ -371,7 +373,7 @@ def plot_sigma_max_and_snapshots(
     if T_ref is not None:
         ax_left.set_xlim(T_ref[0], T_ref[-1])
     #ax_left.set_yscale("log")
-    ax_left.set_xlabel(r"$t\Omega^{-1}$")
+    ax_left.set_xlabel(r"$t[\Omega^{-1}]$")
     ax_left.set_ylabel(r"$\max_x \Sigma(x,t)$")
     ax_left.legend(frameon=False, fontsize=10, ncols = 2, loc = "upper left")
    # ax_left.set_title(r"Nonlinear eigenmode growth and breakdown")
@@ -438,7 +440,7 @@ def plot_sigma_max_and_snapshots(
     for j, (tt, Sx) in enumerate(zip(T_snap_nat, Sig_snap_nat)):
         frac = 0.1 + 0.8 * (j / max(1, n_snap - 1))
         col = cmap(frac)
-        ax_top.plot(x_nat, Sx, color=col, label=fr"$t = {tt:.1f}\,\Omega^{{-1}}$")
+        ax_top.plot(x_nat, Sx, color=col, label=fr"$t = {tt:.1f}\,[\Omega^{{-1}}]$")
 
     ax_top.set_ylabel(r"$\Sigma(x,t)$")
     #ax_top.set_title(rf"Native, $N_x={Nx_nat}$")
@@ -451,7 +453,7 @@ def plot_sigma_max_and_snapshots(
     for j, (tt, Sx) in enumerate(zip(T_snap_ded, Sig_snap_ded)):
         frac = 0.1 + 0.8 * (j / max(1, n_snap - 1))
         col = cmap(frac)
-        ax_bot.plot(x_ded, Sx, color=col, label=fr"$t = {tt:.1f}\,\Omega^{{-1}}$")
+        ax_bot.plot(x_ded, Sx, color=col, label=fr"$t = {tt:.1f}\,[\Omega^{{-1}}]$")
 
     ax_bot.set_xlabel(r"$x$")
     ax_bot.set_ylabel(r"$\Sigma(x,t)$")
@@ -461,7 +463,7 @@ def plot_sigma_max_and_snapshots(
     ax_bot.text(-0.05, 2.7, r"Dedalus", fontsize = 12)
 
 
-    #fig.tight_layout()
+    fig.tight_layout()
     return fig, (ax_left, ax_top, ax_bot)
 
 
@@ -594,7 +596,7 @@ def plot_noise_two_res_summary(
         #    )
 
     ax_left.set_yscale("log")
-    ax_left.set_xlabel(r"$t\Omega^{-1}$")
+    ax_left.set_xlabel(r"$t[\Omega^{-1}]$")
     ax_left.set_ylabel(r"$\max_x \Sigma(x,t)$")
     #ax_left.set_title("Noise-driven growth (two resolutions)")
     ax_left.legend(frameon=False, fontsize=9)
@@ -621,7 +623,7 @@ def plot_noise_two_res_summary(
         frac = 0.1 + 0.8 * (j / max(1, n_snap - 1))
         col = cmap(frac)
         ax_mid.plot(x_lo, Sx, color=col, lw=1.5,
-                    label=fr"$t={tt:.1f}\,\Omega^{{-1}}$")
+                    label=fr"$t={tt:.1f}\,[\Omega^{{-1}}]$")
 
     ax_mid.set_xlabel(r"$x$")
     ax_mid.set_ylabel(r"$\Sigma(x,t)$")
@@ -634,7 +636,7 @@ def plot_noise_two_res_summary(
         frac = 0.1 + 0.8 * (j / max(1, n_snap - 1))
         col = cmap(frac)
         ax_right.plot(x_hi, Sx, color=col, lw=1.5,
-                      label=fr"$t={tt:.1f}\,\Omega^{{-1}}$")
+                      label=fr"$t={tt:.1f}\,[\Omega^{{-1}}]$")
 
     ax_right.set_xlabel(r"$x$")
     ax_right.set_ylabel(r"$\Sigma(x,t)$")
@@ -650,6 +652,7 @@ def plot_noise_two_res_summary(
 
 
 
+
 def plot_noise_dominant_mode_vs_theory(
     run_low: Path | str,
     run_high: Path | str,
@@ -658,19 +661,11 @@ def plot_noise_dominant_mode_vs_theory(
     kmax: float = 5e3,
     nk: int = 120,
     amp_floor: float = 1e-6,
-    figsize=(10, 3.5),
+    figsize=(6.0, 4.0),
 ):
     """
-    Compare the 'winning' dominant mode in noise runs against the
-    theoretically fastest-growing mode from EVP.
-
-    Left panel:
-        γ(k) vs k from an EVP sweep, with the maximum γ highlighted.
-
-    Right panel:
-        For both low- and high-resolution noise runs, track the dominant
-        Fourier mode k_dom(t) (max amplitude over k>0 at each time),
-        and compare to k_max from the EVP sweep.
+    Main panel: k_dom(t) for low/high-res noise runs + horizontal line at k_max.
+    Inset: EVP growth curve γ(k) with k_max highlighted.
 
     Parameters
     ----------
@@ -716,72 +711,73 @@ def plot_noise_dominant_mode_vs_theory(
         if T.size == 0:
             raise ValueError(f"No data in {run_dir}")
 
-        # physical k-grid
         dx = Lx / Nx
-        k_grid = 2.0 * np.pi * np.fft.rfftfreq(Nx, d=dx)  # shape (Nk,)
+        k_grid = 2.0 * np.pi * np.fft.rfftfreq(Nx, d=dx)
 
-        Nk = k_grid.size
         k_dom = np.full_like(T, np.nan, dtype=float)
-
         for i_t, Sx in enumerate(Sig):
             s = Sx - np.mean(Sx)
             ak = np.fft.rfft(s) / s.size
-            # amplitude for k>0
             amps = 2.0 * np.abs(ak[1:])  # skip k=0
             if amps.size == 0:
                 continue
             a_max = np.max(amps)
             if a_max < amp_floor:
-                continue  # leave k_dom as NaN (no clear dominant mode yet)
-            j = int(np.argmax(amps)) + 1  # shift by 1 because we skipped k=0
+                continue
+            j = int(np.argmax(amps)) + 1
             k_dom[i_t] = k_grid[j]
-
         return T, k_dom
-    
+
     from pypalettes import load_cmap
-    cmap = load_cmap("CarolMan") 
+    cmap = load_cmap("CarolMan")
     palette = cmap(np.linspace(0, 1, 5))
     color1 = palette[0]
     color2 = palette[1]
+    color3 = palette[2]
 
-    # low-res
     T_lo, kdom_lo = _dominant_k_series(run_low)
-    # high-res
     T_hi, kdom_hi = _dominant_k_series(run_high)
 
-    # ---------- figure layout ----------
-    fig = plt.figure(figsize=figsize)
-    gs = GridSpec(1, 2, width_ratios=[1.1, 1.0], wspace=0.3, figure=fig)
+    # ---------- figure ----------
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
 
-    ax_left = fig.add_subplot(gs[0, 0])
-    ax_right = fig.add_subplot(gs[0, 1])
+    # main panel: k_dom(t)
+    ax.plot(
+        T_lo, kdom_lo,
+        color=color1, lw=1.5, marker="o", ms=2,
+        label=r"$N_x^\mathrm{(low)}$",
+    )
+    ax.plot(
+        T_hi, kdom_hi,
+        color=color2, lw=1.5, marker="s", ms=2,
+        label=r"$N_x^\mathrm{(high)}$",
+    )
+    ax.axhline(
+        k_max, color="k", ls="--", lw=1.5,
+        label=rf"EVP $k_\mathrm{{max}}\approx {k_max:.1f}$",
+    )
 
-    # --- left: γ(k) vs k with k_max ---
-    ax_left.plot(ks, growth, color="cornflowerblue", lw=2)
-    ax_left.axvline(k_max, color="k", ls="--", lw=1.5,
-                    label=rf"$k_\mathrm{{max}}\approx {k_max:.1f}$")
-    ax_left.set_xscale("log")
-    ax_left.set_yscale("log")
-    ax_left.set_xlabel(r"$k$")
-    ax_left.set_ylabel(r"$\gamma(k)$")
-    #ax_left.set_title("EVP growth rates")
-    ax_left.legend(frameon=False, fontsize=10)
+    ax.set_yscale("log")
+    ax.set_xlabel(r"$t[\Omega^{-1}]$")
+    ax.set_ylabel(r"$k_\mathrm{dom}(t)$")
+    ax.set_xlim(T_lo[0], T_lo[-1])
+    ax.legend(frameon=False, fontsize=10, loc="upper right")
 
-    # --- right: dominant k(t) from noise runs ---
-    ax_right.plot(T_lo, kdom_lo, color=color1, lw=1.5, marker="o",
-                  ms=2, label=r"$N_x^\mathrm{(low)}$")
-    ax_right.plot(T_hi, kdom_hi, color=color2, lw=1.5, marker="s",
-                  ms=2, label=r"$N_x^\mathrm{(high)}$")
-
-    ax_right.axhline(k_max, color="k", ls="--", lw=1.5,
-                     label=rf"EVP $k_\mathrm{{max}}$")
-
-    ax_right.set_xlabel(r"$t\Omega^{-1}$")
-    ax_right.set_ylabel(r"$k_\mathrm{dom}(t)$")
-    #ax_right.set_title("Dominant mode in noise runs")
-    ax_right.legend(frameon=False, fontsize=10)
-    ax_right.set(yscale="log")
-    ax_right.set(xlim = (T_lo[0], T_lo[-1]))
+    # ---------- inset: γ(k) vs k ----------
+    ax_in = inset_axes(
+        ax,
+        width="55%", height="40%",
+        loc="center right",
+        borderpad=1.0,
+    )
+    ax_in.plot(ks, growth, color=color3, lw=1.5)
+    ax_in.set(xlim = (ks[0], ks[-1]))
+    ax_in.axvline(k_max, color="k", ls="--", lw=1.0)
+    ax_in.set_xscale("log")
+    ax_in.set_yscale("log")
+    ax_in.set_xlabel(r"$k$", fontsize=8)
+    ax_in.set_ylabel(r"$\gamma(k)$", fontsize=8)
+    ax_in.tick_params(labelsize=7)
 
     fig.tight_layout()
-    return fig, (ax_left, ax_right)
+    return fig, (ax, ax_in)

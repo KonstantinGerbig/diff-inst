@@ -78,8 +78,8 @@ def plot_linear_robustness_with_hodographs(
     hodograph_color = palette[2]
 
     styles = {
-        "lin_native": dict(ls="--",  color=sigma_hat_color, label="linear TD (native)"),
-        "nl_native":  dict(ls="-", color=sigma_hat_color, label="nonlinear TD (native)"),
+        "lin_native": dict(ls="--",  color=sigma_hat_color, label="linear TD "),
+        "nl_native":  dict(ls="-", color=sigma_hat_color, label="IVP (nonlinear)"),
         "nl_ded":     dict(ls=":",  color=sigma_hat_color, label="nonlinear TD (Dedalus)"),
         "evp":        dict(ls="-",  color="k",  label="EVP"),
     }
