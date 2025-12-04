@@ -287,7 +287,7 @@ def plot_sigma_max_and_snapshots(
     ax_bot  = fig.add_subplot(gs[1, 1])      # Dedalus snapshots
 
     from pypalettes import load_cmap
-    cmap = load_cmap("Callanthias_australis") 
+    cmap = load_cmap("CarolMan") 
     palette = cmap(np.linspace(0, 1, 4))
 
 
@@ -472,6 +472,8 @@ def plot_noise_two_res_summary(
     label_low: str = r"$N_x^\mathrm{(low)}$",
     label_high: str = r"$N_x^\mathrm{(high)}$",
     k_ref: float | None = None,
+    kmin: float = 10.0,
+    kmax: float = 5e3,
     n_snap: int = 4,
     figsize=(10, 3.5),
 ):
@@ -539,17 +541,23 @@ def plot_noise_two_res_summary(
     ax_mid   = fig.add_subplot(gs[0, 1])
     ax_right = fig.add_subplot(gs[0, 2])
 
-    # ---------- left: max Σ vs t (+ EVP envelope) ----------
-    ax_left.plot(T_lo, Smax_lo, color="C0", lw=2, label=label_low)
-    ax_left.plot(T_hi, Smax_hi, color="C1", lw=2, ls="--", label=label_high)
+    from pypalettes import load_cmap
+    cmap = load_cmap("CarolMan") 
+    palette = cmap(np.linspace(0, 1, 5))
+    color1 = palette[0]
+    color2 = palette[1]
 
+    # ---------- left: max Σ vs t (+ EVP envelope) ----------
+    ax_left.plot(T_lo, Smax_lo, color=color1, lw=2, label=label_low)
+    ax_left.plot(T_hi, Smax_hi, color=color2, lw=2, label=label_high)
+
+    cfg = load_config_from_run(run_low)
+    Sig0 = float(getattr(cfg, "sig_0", getattr(cfg, "S0", 1.0)))
+    dSig0 = float(Smax_lo[0] - Sig0)
+    
     # EVP envelope using low-res config/time series
     if k_ref is not None:
         try:
-            cfg = load_config_from_run(run_low)
-            Sig0 = float(getattr(cfg, "sig_0", getattr(cfg, "S0", 1.0)))
-            dSig0 = float(Smax_lo[0] - Sig0)
-
             w, _ = evp_solve_at_k(cfg, float(k_ref))
             gamma = float(w[0].real)
             t0 = float(T_lo[0])
@@ -563,11 +571,33 @@ def plot_noise_two_res_summary(
         except Exception as e:
             print(f"[plot_noise_two_res_summary] EVP overlay failed: {e}")
 
+    else: 
+        # EVP sweep fastest growing mode
+
+        nk = 200
+        ks = np.logspace(np.log10(kmin), np.log10(kmax), nk)
+        growth = np.empty_like(ks)
+        for i, k in enumerate(ks):
+            w, _ = evp_solve_at_k(cfg, float(k))
+            growth[i] = w[0].real
+
+        imax = int(np.argmax(growth))
+        k_max = float(ks[imax])
+        gamma_max = float(growth[imax])
+        t0 = float(T_lo[0])
+        Sig_lin = Sig0 + dSig0 * np.exp(gamma_max * (T_lo - t0))
+
+        #ax_left.plot(
+        #        T_lo, Sig_lin,
+        #        color="k", ls=":", lw=1.5,
+        #        label=rf"EVP, $\gamma_\mathrm{{max}}={gamma_max:.3g}$",
+        #    )
+
     ax_left.set_yscale("log")
     ax_left.set_xlabel(r"$t\Omega^{-1}$")
     ax_left.set_ylabel(r"$\max_x \Sigma(x,t)$")
-    ax_left.set_title("Noise-driven growth (two resolutions)")
-    ax_left.legend(frameon=False, fontsize=8)
+    #ax_left.set_title("Noise-driven growth (two resolutions)")
+    ax_left.legend(frameon=False, fontsize=9)
     ax_left.set(xlim = (T_lo[0], T_lo[-1]))
 
     # ---------- choose snapshot times (finite) ----------
@@ -583,7 +613,8 @@ def plot_noise_two_res_summary(
     T_snap_lo, Sig_snap_lo = _choose_snapshots(T_lo, Sig_lo, n_snap)
     T_snap_hi, Sig_snap_hi = _choose_snapshots(T_hi, Sig_hi, n_snap)
 
-    cmap = plt.get_cmap("viridis")
+    #cmap = plt.get_cmap("viridis")
+    cmap = load_cmap("Hiroshige") 
 
     # ---------- middle: low-res snapshots ----------
     for j, (tt, Sx) in enumerate(zip(T_snap_lo, Sig_snap_lo)):
@@ -594,8 +625,8 @@ def plot_noise_two_res_summary(
 
     ax_mid.set_xlabel(r"$x$")
     ax_mid.set_ylabel(r"$\Sigma(x,t)$")
-    ax_mid.set_title(rf"Snapshots, {label_low}")
-    ax_mid.legend(frameon=False, fontsize=7)
+    ax_mid.set_title(rf"{label_low}")
+    ax_mid.legend(frameon=False, fontsize=8, ncols = 2)
     ax_mid.set(xlim = (x_lo[0], x_lo[-1]))
 
     # ---------- right: high-res snapshots ----------
@@ -607,8 +638,8 @@ def plot_noise_two_res_summary(
 
     ax_right.set_xlabel(r"$x$")
     ax_right.set_ylabel(r"$\Sigma(x,t)$")
-    ax_right.set_title(rf"Snapshots, {label_high}")
-    ax_right.legend(frameon=False, fontsize=7)
+    ax_right.set_title(rf"{label_high}")
+    #ax_right.legend(frameon=False, fontsize=7)
     ax_right.set(xlim = (x_hi[0], x_hi[-1]))
 
     fig.tight_layout()
@@ -706,6 +737,12 @@ def plot_noise_dominant_mode_vs_theory(
             k_dom[i_t] = k_grid[j]
 
         return T, k_dom
+    
+    from pypalettes import load_cmap
+    cmap = load_cmap("CarolMan") 
+    palette = cmap(np.linspace(0, 1, 5))
+    color1 = palette[0]
+    color2 = palette[1]
 
     # low-res
     T_lo, kdom_lo = _dominant_k_series(run_low)
@@ -720,20 +757,20 @@ def plot_noise_dominant_mode_vs_theory(
     ax_right = fig.add_subplot(gs[0, 1])
 
     # --- left: γ(k) vs k with k_max ---
-    ax_left.plot(ks, growth, color="C0", lw=2)
+    ax_left.plot(ks, growth, color="cornflowerblue", lw=2)
     ax_left.axvline(k_max, color="k", ls="--", lw=1.5,
                     label=rf"$k_\mathrm{{max}}\approx {k_max:.1f}$")
     ax_left.set_xscale("log")
     ax_left.set_yscale("log")
     ax_left.set_xlabel(r"$k$")
     ax_left.set_ylabel(r"$\gamma(k)$")
-    ax_left.set_title("EVP growth rates")
-    ax_left.legend(frameon=False, fontsize=8)
+    #ax_left.set_title("EVP growth rates")
+    ax_left.legend(frameon=False, fontsize=10)
 
     # --- right: dominant k(t) from noise runs ---
-    ax_right.plot(T_lo, kdom_lo, color="C0", lw=1.5, marker="o",
+    ax_right.plot(T_lo, kdom_lo, color=color1, lw=1.5, marker="o",
                   ms=2, label=r"$N_x^\mathrm{(low)}$")
-    ax_right.plot(T_hi, kdom_hi, color="C1", lw=1.5, marker="s",
+    ax_right.plot(T_hi, kdom_hi, color=color2, lw=1.5, marker="s",
                   ms=2, label=r"$N_x^\mathrm{(high)}$")
 
     ax_right.axhline(k_max, color="k", ls="--", lw=1.5,
@@ -741,9 +778,10 @@ def plot_noise_dominant_mode_vs_theory(
 
     ax_right.set_xlabel(r"$t\Omega^{-1}$")
     ax_right.set_ylabel(r"$k_\mathrm{dom}(t)$")
-    ax_right.set_title("Dominant mode in noise runs")
-    ax_right.legend(frameon=False, fontsize=8)
+    #ax_right.set_title("Dominant mode in noise runs")
+    ax_right.legend(frameon=False, fontsize=10)
     ax_right.set(yscale="log")
+    ax_right.set(xlim = (T_lo[0], T_lo[-1]))
 
     fig.tight_layout()
     return fig, (ax_left, ax_right)
