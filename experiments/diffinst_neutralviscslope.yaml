@@ -1,6 +1,6 @@
 # diffusion-slope branch (small τ_s; β_diff < -2)
 
-beta_diff: -2.5
+beta_diff: -2.4
 beta_visc: 0
 ts: 0.2
 D_0: 1.0e-5
