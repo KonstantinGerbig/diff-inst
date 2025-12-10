@@ -372,7 +372,7 @@ def plot_sigma_max_and_snapshots(
 
     if T_ref is not None:
         ax_left.set_xlim(T_ref[0], T_ref[-1])
-    #ax_left.set_yscale("log")
+    #ax_left.set(xlim =(0,15), ylim = (1,5))
     ax_left.set_xlabel(r"$t[\Omega^{-1}]$")
     ax_left.set_ylabel(r"$\max_x \Sigma(x,t)$")
     ax_left.legend(frameon=False, fontsize=10, ncols = 2, loc = "upper left")
@@ -447,7 +447,7 @@ def plot_sigma_max_and_snapshots(
     ax_top.tick_params(labelbottom=False)  # x-label only on bottom panel
     ax_top.legend(frameon=True, fontsize=8, loc="upper right", ncols = 2)
     ax_top.set(xlim = (x_nat[0], x_nat[-1]))
-    ax_top.text(-0.05, 2.6, r"Native", fontsize = 12)
+    ax_top.text(-0.062, 2.2, r"Native", fontsize = 12)
 
     # Dedalus snapshots (bottom right)
     for j, (tt, Sx) in enumerate(zip(T_snap_ded, Sig_snap_ded)):
@@ -460,7 +460,7 @@ def plot_sigma_max_and_snapshots(
     ax_bot.set(xlim = (x_ded[0], x_ded[-1]))
     #ax_bot.set_title(rf"Dedalus, $N_x={Nx_ded}$")
     #ax_bot.legend(frameon=False, fontsize=7, loc="upper center")
-    ax_bot.text(-0.05, 2.7, r"Dedalus", fontsize = 12)
+    ax_bot.text(-0.062, 2.2, r"Dedalus", fontsize = 12)
 
 
     fig.tight_layout()
@@ -470,8 +470,10 @@ def plot_sigma_max_and_snapshots(
 
 def plot_noise_two_res_summary(
     run_low: Path | str,
+    run_mid: Path | str,
     run_high: Path | str,
     label_low: str = r"$N_x^\mathrm{(low)}$",
+    label_mid: str = r"$N_x^\mathrm{(mid)}$",
     label_high: str = r"$N_x^\mathrm{(high)}$",
     k_ref: float | None = None,
     kmin: float = 10.0,
@@ -506,6 +508,7 @@ def plot_noise_two_res_summary(
         Overall figure size.
     """
     run_low = Path(run_low)
+    run_mid = Path(run_mid)
     run_high = Path(run_high)
 
     # ---------- load low-res ----------
@@ -519,14 +522,25 @@ def plot_noise_two_res_summary(
 
     Smax_lo = np.nanmax(Sig_lo, axis=1)
 
+    # ---------- load mid-res ----------
+    Nx_mid, Lx_mid, files_mid, man_mid = load_nonlinear_run(run_mid)
+    T_mid, Sig_mid = load_nonlinear_Sigma_series(files_mid)
+    if T_mid.size == 0:
+        raise ValueError(f"No data in mid-res run {run_mid}")
+
+    with np.load(files_mid[0]) as Z1:
+        x_mid = np.asarray(Z1["x"])
+
+    Smax_mid = np.nanmax(Sig_mid, axis=1)
+
     # ---------- load high-res ----------
     Nx_hi, Lx_hi, files_hi, man_hi = load_nonlinear_run(run_high)
     T_hi, Sig_hi = load_nonlinear_Sigma_series(files_hi)
     if T_hi.size == 0:
         raise ValueError(f"No data in high-res run {run_high}")
 
-    with np.load(files_hi[0]) as Z1:
-        x_hi = np.asarray(Z1["x"])
+    with np.load(files_hi[0]) as Z2:
+        x_hi = np.asarray(Z2["x"])
 
     Smax_hi = np.nanmax(Sig_hi, axis=1)
 
@@ -548,10 +562,12 @@ def plot_noise_two_res_summary(
     palette = cmap(np.linspace(0, 1, 5))
     color1 = palette[0]
     color2 = palette[1]
+    color3 = palette[2]
 
     # ---------- left: max Σ vs t (+ EVP envelope) ----------
     ax_left.plot(T_lo, Smax_lo, color=color1, lw=2, label=label_low)
-    ax_left.plot(T_hi, Smax_hi, color=color2, lw=2, label=label_high)
+    ax_left.plot(T_mid, Smax_mid, color=color2, lw=2, label=label_mid)
+    ax_left.plot(T_hi, Smax_hi, color=color3, lw=2, label=label_high)
 
     cfg = load_config_from_run(run_low)
     Sig0 = float(getattr(cfg, "sig_0", getattr(cfg, "S0", 1.0)))
@@ -628,7 +644,7 @@ def plot_noise_two_res_summary(
     ax_mid.set_xlabel(r"$x$")
     ax_mid.set_ylabel(r"$\Sigma(x,t)$")
     ax_mid.set_title(rf"{label_low}")
-    ax_mid.legend(frameon=False, fontsize=8, ncols = 2)
+    ax_mid.legend(frameon=True, fontsize=8, ncols = 2)
     ax_mid.set(xlim = (x_lo[0], x_lo[-1]))
 
     # ---------- right: high-res snapshots ----------
@@ -655,8 +671,12 @@ def plot_noise_two_res_summary(
 
 def plot_noise_dominant_mode_vs_theory(
     run_low: Path | str,
+    run_mid: Path | str,
     run_high: Path | str,
     cfg_path: Path | str,
+    label_low: str = r"$N_x^\mathrm{(low)}$",
+    label_mid: str = r"$N_x^\mathrm{(mid)}$",
+    label_high: str = r"$N_x^\mathrm{(high)}$",
     kmin: float = 10.0,
     kmax: float = 5e3,
     nk: int = 120,
@@ -689,6 +709,7 @@ def plot_noise_dominant_mode_vs_theory(
         Figure size.
     """
     run_low = Path(run_low)
+    run_mid = Path(run_mid)
     run_high = Path(run_high)
     cfg_path = Path(cfg_path)
     cfg = Config.from_yaml(cfg_path)
@@ -735,7 +756,10 @@ def plot_noise_dominant_mode_vs_theory(
     color2 = palette[1]
     color3 = palette[2]
 
+    color4 = palette[2]
+
     T_lo, kdom_lo = _dominant_k_series(run_low)
+    T_mid, kdom_mid = _dominant_k_series(run_mid)
     T_hi, kdom_hi = _dominant_k_series(run_high)
 
     # ---------- figure ----------
@@ -745,12 +769,17 @@ def plot_noise_dominant_mode_vs_theory(
     ax.plot(
         T_lo, kdom_lo,
         color=color1, lw=1.5, marker="o", ms=2,
-        label=r"$N_x^\mathrm{(low)}$",
+        label=label_low,
+    )
+    ax.plot(
+        T_mid, kdom_mid,
+        color=color2, lw=1.5, marker="o", ms=2,
+        label=label_mid,
     )
     ax.plot(
         T_hi, kdom_hi,
-        color=color2, lw=1.5, marker="s", ms=2,
-        label=r"$N_x^\mathrm{(high)}$",
+        color=color3, lw=1.5, marker="s", ms=2,
+        label=label_high,
     )
     ax.axhline(
         k_max, color="k", ls="--", lw=1.5,
@@ -766,11 +795,11 @@ def plot_noise_dominant_mode_vs_theory(
     # ---------- inset: γ(k) vs k ----------
     ax_in = inset_axes(
         ax,
-        width="55%", height="40%",
+        width="55%", height="35%",
         loc="center right",
         borderpad=1.0,
     )
-    ax_in.plot(ks, growth, color=color3, lw=1.5)
+    ax_in.plot(ks, growth, color="k", lw=1.5)
     ax_in.set(xlim = (ks[0], ks[-1]))
     ax_in.axvline(k_max, color="k", ls="--", lw=1.0)
     ax_in.set_xscale("log")

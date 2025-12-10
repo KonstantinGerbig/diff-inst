@@ -7,7 +7,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
-from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict, Optional
@@ -291,10 +290,10 @@ def plot_linear_robustness_with_hodographs(
             inset.xaxis.set_label_position('top')
             inset.tick_params(axis='x', labeltop=True, labelbottom=False)
         
-        axes[0].set_title("Stable")
-        axes[1].set_title(r"$D$-slope driven instability ")
-        axes[2].set_title(r"$\nu$-slope driven instability")
-        axes[3].set_title("Overstability")
+        axes[0].set_title("(a) stable")
+        axes[1].set_title(r"(b) $D$-slope driven instability ")
+        axes[2].set_title(r"(c) $\nu$-slope driven instability")
+        axes[3].set_title("(d) Overstability")
 
     fig.tight_layout()
     return fig, axes

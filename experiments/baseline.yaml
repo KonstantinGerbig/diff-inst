@@ -1,8 +1,8 @@
 # Damped mode (small τ_s; β_diff > -2, beta_visc > -1)
 
-beta_diff: -1.0
-beta_visc: -1.0
-ts: 0.2
+beta_diff: -0.5
+beta_visc: -0.5
+ts: 0.1
 D_0: 1.0e-5
 nu_0: 1.0e-5
 nu_g: 1.0e-4

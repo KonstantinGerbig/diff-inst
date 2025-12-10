@@ -2,7 +2,7 @@
 
 beta_diff: 0.7
 beta_visc: 0.7
-ts: 100
+ts: 50
 D_0: 1.0e-5
 nu_0: 1.0e-5
 nu_g: 1.0e-4
