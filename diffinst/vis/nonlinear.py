@@ -810,3 +810,122 @@ def plot_noise_dominant_mode_vs_theory(
 
     fig.tight_layout()
     return fig, (ax, ax_in)
+
+
+
+
+def plot_piecewise_noise_comparison(
+    run_powerlaw: str | Path,
+    run_piecewise: str | Path,
+    label_powerlaw: str = r"power-law $D(\Sigma)$",
+    label_piecewise: str = r"piecewise $D(\Sigma)$",
+    n_snap: int = 6,
+    figsize: tuple[float, float] = (9.0, 3.0),
+):
+    """
+    Compare a noise run with the original power-law closure against
+    a run with piecewise-saturated diffusion.
+
+    Layout:
+        - Left panel: max_x Sigma(x,t) vs t (log y) for both runs.
+        - Right panel: Sigma(x,t) snapshots for the *piecewise* run only.
+
+    Parameters
+    ----------
+    run_powerlaw, run_piecewise : path-like
+        Nonlinear native runs started from identical noise IC but with
+        different diffusion closures.
+
+    label_powerlaw, label_piecewise : str
+        Legend / title labels.
+
+    n_snap : int
+        Number of snapshots shown for the piecewise run.
+
+    figsize : (float, float)
+        Overall figure size.
+    """
+    run_powerlaw = Path(run_powerlaw)
+    run_piecewise = Path(run_piecewise)
+
+    # ----- power-law run (may blow up early) -----
+    Nx_pl, Lx_pl, files_pl, man_pl = load_nonlinear_run(run_powerlaw)
+    T_pl, Sig_pl = load_nonlinear_Sigma_series(files_pl)
+    if T_pl.size == 0:
+        raise ValueError(f"No data in power-law run {run_powerlaw}")
+    Smax_pl = np.nanmax(Sig_pl, axis=1)
+
+    # ----- piecewise run (saturating) -----
+    Nx_pw, Lx_pw, files_pw, man_pw = load_nonlinear_run(run_piecewise)
+    T_pw, Sig_pw = load_nonlinear_Sigma_series(files_pw)
+    if T_pw.size == 0:
+        raise ValueError(f"No data in piecewise run {run_piecewise}")
+    with np.load(files_pw[0]) as Z1:
+        x_pw = np.asarray(Z1["x"])
+    Smax_pw = np.nanmax(Sig_pw, axis=1)
+
+    # ----- figure layout: 1×2 -----
+    fig = plt.figure(figsize=figsize)
+    gs = GridSpec(
+        1, 2,
+        width_ratios=[1.1, 1.0],
+        wspace=0.35,
+        figure=fig,
+    )
+
+    ax_left  = fig.add_subplot(gs[0, 0])
+    ax_right = fig.add_subplot(gs[0, 1])
+
+    # simple color palette
+    try:
+        from pypalettes import load_cmap
+        cmap_main = load_cmap("CarolMan")
+        colors = cmap_main(np.linspace(0, 1, 4))
+        c_pl, c_pw = colors[0], colors[2]
+    except Exception:
+        c_pl, c_pw = "C0", "C1"
+
+    # ----- left: max Σ(t) for both runs -----
+    ax_left.plot(T_pl, Smax_pl, color=c_pl, lw=2, label=label_powerlaw)
+    ax_left.plot(T_pw, Smax_pw, color=c_pw, lw=2, label=label_piecewise)
+
+    ax_left.set_yscale("log")
+    ax_left.set_xlabel(r"$t[\Omega^{-1}]$")
+    ax_left.set_ylabel(r"$\max_x \Sigma(x,t)$")
+    ax_left.set_xlim(T_pl[0], max(T_pl[-1], T_pw[-1]))
+    ax_left.legend(frameon=False, fontsize=9)
+
+    # ----- helper: choose snapshots from the *piecewise* run -----
+    def _choose_snapshots(T, Sig, n):
+        finite = np.all(np.isfinite(Sig), axis=1)
+        T_f = T[finite]
+        Sig_f = Sig[finite]
+        if T_f.size == 0:
+            return np.array([]), np.empty((0,) + Sig.shape[1:])
+        idx = np.linspace(0, len(T_f) - 1, n).astype(int)
+        return T_f[idx], Sig_f[idx]
+
+    T_snap_pw, Sig_snap_pw = _choose_snapshots(T_pw, Sig_pw, n_snap)
+
+    # snapshot colormap
+    try:
+        from pypalettes import load_cmap
+        cmap_snap = load_cmap("Hiroshige")
+    except Exception:
+        cmap_snap = plt.get_cmap("viridis")
+
+    # ----- right: piecewise snapshots -----
+    for j, (tt, Sx) in enumerate(zip(T_snap_pw, Sig_snap_pw)):
+        frac = 0.1 + 0.8 * (j / max(1, n_snap - 1))
+        col = cmap_snap(frac)
+        ax_right.plot(x_pw, Sx, color=col, lw=1.5,
+                      label=fr"$t={tt:.1f}\,[\Omega^{{-1}}]$")
+
+    ax_right.set_xlabel(r"$x$")
+    ax_right.set_ylabel(r"$\Sigma(x,t)$")
+    ax_right.set_title(label_piecewise)
+    ax_right.set_xlim(x_pw[0], x_pw[-1])
+    ax_right.legend(frameon=True, fontsize=8, ncols=2)
+
+    fig.tight_layout()
+    return fig, (ax_left, ax_right)

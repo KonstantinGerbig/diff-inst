@@ -18,9 +18,9 @@ sigma_sat_factor: 2.0
 
 # grid / domain
 Nx: 128
-Lx: 0.2
+Lx: 0.1
 exact_fit:
-  enable: true
+  enable: false
   K_target: 100.0
   harmonics: 2
 
