@@ -23,14 +23,53 @@ def compute_D_nu(Sigma: np.ndarray, params: dict):
     beta_diff = float(params.get("beta_diff", 0.0))
     beta_visc = float(params.get("beta_visc", 0.0))
 
+    # optional piecewise diffusion
+    enable_piecewise = bool(params.get("enable_piecewise_diffusion", False))
+    sigma_sat_factor = float(params.get("sigma_sat_factor", 2.0))  # Sigma_sat = factor * S0
+    
+
     # tiny floor purely for numeric safety; this does *not* regularize the model,
     # it only avoids divide-by-zero if Sigma hits exactly 0
     sigma_floor = 1e-14 * max(S0, 1.0)
     Sigma_safe = np.where(Sigma > sigma_floor, Sigma, sigma_floor)
 
     ratio = Sigma_safe / S0
-    D_raw  = D0  * ratio**beta_diff
-    nu_raw = nu0 * ratio**beta_visc
+    Sigma_sat = sigma_sat_factor * S0
+
+    # ----------------- Diffusion D(Sigma) -----------------
+    if enable_piecewise and (D0 != 0.0):
+        # start with low-Σ plateau: D = D0 for Sigma <= S0
+        D_raw = np.full_like(Sigma_safe, D0, dtype=float)
+
+        if beta_diff != 0.0:
+            # middle band: S0 < Sigma < Sigma_sat → power law
+            mid_mask = (Sigma_safe > S0) & (Sigma_safe < Sigma_sat)
+            D_raw[mid_mask] = D0 * (Sigma_safe[mid_mask] / S0)**beta_diff
+
+            # high-Σ plateau: Sigma >= Sigma_sat
+            D_sat = D0 * (Sigma_sat / S0)**beta_diff
+            high_mask = Sigma_safe >= Sigma_sat
+            D_raw[high_mask] = D_sat
+    else:
+        # original pure power-law closure
+        D_raw = D0 * ratio**beta_diff
+
+    # ----------------- Viscosity nu(Sigma) -----------------
+    if enable_piecewise and (nu0 != 0.0):
+        # low-Σ plateau: nu = nu0 for Sigma <= S0
+        nu_raw = np.full_like(Sigma_safe, nu0, dtype=float)
+
+        if beta_visc != 0.0:
+            # middle band: S0 < Sigma < Sigma_sat → power law
+            mid_mask = (Sigma_safe > S0) & (Sigma_safe < Sigma_sat)
+            nu_raw[mid_mask] = nu0 * (Sigma_safe[mid_mask] / S0)**beta_visc
+
+            # high-Σ plateau: Sigma >= Sigma_sat
+            nu_sat = nu0 * (Sigma_sat / S0)**beta_visc
+            high_mask = Sigma_safe >= Sigma_sat
+            nu_raw[high_mask] = nu_sat
+    else:
+        nu_raw = nu0 * ratio**beta_visc
 
     return D_raw, nu_raw
 

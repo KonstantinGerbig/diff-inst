@@ -201,6 +201,8 @@ class NonlinearNative:
             nu_g=float(getattr(self.cfg, "nu_g", 0.0)),
             # flags
             enable_gas=self.enable_gas,
+            enable_piecewise_diffusion=bool(getattr(self.cfg, "enable_piecewise_diffusion", False)),
+            sigma_sat_factor=float(getattr(self.cfg, "sigma_sat_factor", 2.0)),
         )
 
     # IMEX RK2 using rhs_split (same structure; now includes uy)

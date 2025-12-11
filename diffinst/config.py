@@ -25,6 +25,8 @@ class Config:
     save_stride: int = 50
     log_stride: int = 50
     enable_gas: bool = True
+    enable_piecewise_diffusion: bool = False
+    sigma_sat_factor: float = 2.0
     enable_dedalus_evp: bool = True
     solver: Dict[str, Any] = field(default_factory=lambda: {"backend": "native"})
     source_file: str = ""
