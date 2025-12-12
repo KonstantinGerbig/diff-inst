@@ -929,3 +929,77 @@ def plot_piecewise_noise_comparison(
 
     fig.tight_layout()
     return fig, (ax_left, ax_right)
+
+
+def plot_pw_saturation_three(
+    run_powerlaw: str | Path,
+    run_pw1: str | Path,
+    run_pw2: str | Path,
+    label_powerlaw: str = r"power-law $D(\Sigma)$",
+    label_pw1: str = r"piecewise $D(\Sigma)$, $\Sigma_{\rm sat}=1.5\,\Sigma_0$",
+    label_pw2: str = r"piecewise $D(\Sigma)$, $\Sigma_{\rm sat}=2\,\Sigma_0$",
+    figsize: tuple[float, float] = (5.0, 3.0),
+):
+    """
+    Single-panel comparison of max_x Sigma(t) for three runs:
+    - a pure power-law D(Sigma),
+    - two piecewise closures with different saturation amplitudes.
+
+    Parameters
+    ----------
+    run_powerlaw, run_pw1, run_pw2 : path-like
+        Nonlinear run directories (native backend).
+
+    label_powerlaw, label_pw1, label_pw2 : str
+        Legend labels for the three curves.
+
+    figsize : (float, float)
+        Figure size passed to matplotlib.
+    """
+    def _load_max_series(run_dir: str | Path):
+        run_dir = Path(run_dir)
+        Nx, Lx, files, man = load_nonlinear_run(run_dir)
+        T, Sig = load_nonlinear_Sigma_series(files)
+        if T.size == 0:
+            raise ValueError(f"No data in run {run_dir}")
+        Smax = np.nanmax(Sig, axis=1)
+        return T, Smax
+
+    # load all three
+    T_pl, Smax_pl   = _load_max_series(run_powerlaw)
+    T_pw1, Smax_pw1 = _load_max_series(run_pw1)
+    T_pw2, Smax_pw2 = _load_max_series(run_pw2)
+
+    # figure
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # colors
+    try:
+        from pypalettes import load_cmap
+        cmap = load_cmap("AsteroidCity1")
+        palette = cmap(np.linspace(0, 1, 5))
+        c1, c2, c3 = palette[0], palette[2], palette[4]
+    except Exception:
+        # fallback
+        colors = plt.get_cmap("tab10").colors
+        c1, c2, c3 = colors[0], colors[1], colors[2]
+
+    ax.plot(T_pl,  Smax_pl,   color=c1, lw=2.0, label=label_powerlaw)
+    ax.plot(T_pw1, Smax_pw1,  color=c2, lw=2.0, label=label_pw1)
+    ax.plot(T_pw2, Smax_pw2,  color=c3, lw=2.0, label=label_pw2)
+
+
+    # axis formatting
+    ax.set_yscale("log")
+    t_min = min(T_pl[0],  T_pw1[0],  T_pw2[0])
+    t_max = max(T_pl[-1], T_pw1[-1], T_pw2[-1])
+    #t_min = T_pw2[0]; t_max = T_pw2[-1]
+    ax.set_xlim(t_min, t_max)
+
+    ax.set_xlabel(r"$t[\Omega^{-1}]$")
+    ax.set_ylabel(r"$\max_x \Sigma(x,t)$")
+
+    ax.legend(frameon=False, fontsize=9, loc = "lower right")
+
+    fig.tight_layout()
+    return fig, ax

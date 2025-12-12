@@ -14,7 +14,7 @@ enable_gas: true   # or false
 
 # piecewise diffusion
 enable_piecewise_diffusion: true # default is false
-sigma_sat_factor: 1.5
+sigma_sat_factor: 2.0
 
 # grid / domain
 Nx: 128
