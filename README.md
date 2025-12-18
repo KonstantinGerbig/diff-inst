@@ -1,16 +1,223 @@
-# Diffusive Instability (dust–gas) — clean numerical stack
-
-Goal: a fast, clear, reproducible **1D** stack for the dust–gas diffusive instability  
-(axes: **EVP → linear time-domain → nonlinear saturation**), with switchable solvers:
-
-- Native 1D pseudo-spectral IMEX (NumPy / FFT)
-- Optional Dedalus backend for cross-checks
-
-All runs are configured via YAML + a small set of CLI overrides.
 
 ---
 
-## Status / Capabilities
+# Diffusive Instabilities in Dusty Disks — numerical companion repo
+
+Fast, reproducible **1D axisymmetric** experiments for the diffusive instability in dusty disks, including an **incompressible, viscous gas** that responds **azimuthally** and couples to the dust via **drag backreaction**.
+
+This repo supports the workflow used in the paper:
+
+**EVP (dispersion relation) → linear time-domain validation → nonlinear evolution / breakdown → saturating closure experiments**
+
+Two interchangeable backends:
+
+- **Native**: 1D pseudo-spectral **IMEX** solver (NumPy + FFT) for speed and clarity  
+- **Dedalus** (optional): independent implementation for cross-checks  
+
+All runs are configured via **YAML** (+ a small set of CLI overrides). Every run writes a manifest + streaming diagnostics + checkpoints for analysis and plotting.
+
+---
+
+## What model is being solved?
+
+This code integrates the paper’s 1D axisymmetric dust–gas system (dust: `Σ, v_x, v_y`; gas: `u_y`), with periodic boundary conditions in `x`.
+
+### Closure highlight (important)
+
+The dust “pressure” is implemented via the closure
+
+\[
+c_d^2 = D/t_s,
+\]
+
+so the effective dust pressure inherits the same density dependence as the turbulent diffusivity \(D(\Sigma)\). This is a **closure choice** intended to represent unresolved velocity dispersion associated with turbulent mixing; it is not meant as a fundamental equation of state. The repo includes both pure power-law closures and a piecewise saturating closure used to eliminate nonlinear blow-up in 1D.
+
+---
+
+## Repo structure (high level)
+
+diffinst/
+  solvers/
+    native_*                # pseudo-spectral IMEX solvers (linear + nonlinear)
+    dedalus_backend.py      # optional Dedalus implementation
+  vis/
+    linear.py               # visualization scripts for linear experiments
+    nonlinear.py            # visualization scripts for nonlinear experiments
+  linear_ops.py             # EVP / dispersion relation utilities
+  analysis_api.py           # run loading, metrics, mode amplitudes
+  config.py                 # Config dataclass + YAML merge / validation
+  io.py                     # StreamWriter + run directory layout
+  io_utils.py
+  fields.py
+  grid.py
+  runtime.py
+  operators.py
+  nonlinear_terms.py
+
+defaults.yaml               # baseline parameters
+experiments/*.yaml          # paper-style configs
+scripts/                    # runnable entry points
+notebooks/                  # jupyter notebooks
+figures/                    # figure outputs
+runs/                       # output (ignored by git)
+
+---
+
+## Output format (reproducibility)
+
+Each run creates a self-contained directory under `runs/`:
+
+- `run.json` — immutable manifest (resolved config + numerics: `Nx`, `Lx`, backend, `dt`, `tstop`, seed, etc.)
+- `metrics.jsonl` — streaming time-series diagnostics (e.g. mass, selected mode amplitudes)
+- `checkpoints/chk_****.npz` — snapshots containing `t, x, Sigma, vx, vy, uy`
+
+The analysis API can load and compare runs independent of resolution/backend.
+
+---
+
+## Overview of capabilities
+
+### Linear theory (EVP)
+
+- 4×4 eigenvalue problem for the dispersion relation  
+- CLI sweeps over physical wavenumber `k` to obtain growth rates `γ(k)`  
+- EVP eigenvectors used to generate matched initial conditions for TD solvers  
+
+### Linear time-domain (native)
+
+- IMEX pseudo-spectral integrator for the linearized system  
+- Consistency checks: EVP growth rates vs TD amplitude evolution  
+
+### Nonlinear time-domain (native)
+
+- 1D pseudo-spectral IMEX integrator for the full nonlinear equations  
+  - Explicit: advection + variable-coefficient fluxes + drag + nonlinear dust-pressure terms  
+  - Implicit: constant-coefficient Laplacian viscosity terms (dust/gas)  
+- Seeding options:
+  - `seed_mode="eigen"` (EVP-based IC at chosen `k`)
+  - `seed_mode="cos"`
+  - `seed_mode="noise"`
+  - `--init-from path.npz` (load `Sigma, vx, vy, uy`)
+- Closure relations:
+  - Power-law closures `D, ν ∝ Σ^β`  
+  - Piecewise saturating closure (negative slope active only over a finite density interval)  
+
+### Dedalus backend (optional cross-check)
+
+- Same equations implemented in Dedalus
+- Supports eigen, cosine, noise and external IC seeding
+- Currently does not support piecewise closure
+- Writes checkpoints compatible with the same analysis tools as the native solver
+
+
+---
+
+## Quickstart
+
+### Install (recommended: venv)
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -U pip
+pip install -e .
+pip install numpy scipy matplotlib pyyaml pytest
+```
+
+### Optional: Dedalus
+
+Dedalus is optional and used for cross-checks only. If you want it, set up a dedalus3 environment per Dedalus documentation, then install this repo inside that env.
+
+## Running experiments via Scripts
+
+Exact script names may vary slightly; the pattern is: pick an experiments/*.yaml and override numerics (Nx, dt, tstop, backend, seed) on the CLI.
+
+### 1) EVP sweep: growth rate vs wavenumber
+
+```bash
+python scripts/run_evp.py \
+  --config experiments/diffinst.yaml \
+  --kmin 10 --kmax 400 --nk 200
+```
+
+Outputs growth rates γ(k) and (optionally) eigenvector information.
+
+### 2) Linear TD: validate EVP growth at a single k
+
+```bash
+python scripts/run_linear.py \
+  --config experiments/diffinst.yaml \
+  --k 100 --Nx 128 --dt 1e-3 --tstop 5.0 \
+  --seed eigen
+```
+
+Compare the measured mode amplitude growth to EVP’s γ(k).
+
+### 3) Make initial condition
+
+```bash
+python -m scripts.make_ic_eigen \
+  --config experiments/unstable_baseline.yaml \
+  --k 100.0 \
+  --amp 1e-6 \
+  --Nx 256 \
+  --exact-fit-harm 2
+```
+
+
+### 3) Nonlinear eigenmode run
+
+```bash
+python scripts/run_nonlinear.py \
+  --config experiments/diffinst.yaml \
+  --k 100 --Nx 128 --dt 1e-3 --tstop 5.0 \
+  --seed eigen --amp 0.1
+```
+
+
+### 4) Noise run: mode selection
+
+```bash
+python scripts/run_nonlinear.py \
+  --config experiments/diffinst.yaml \
+  --seed noise --Nx 512 --dt 5e-4 --tstop 5.0 \
+  --noise-amp 1e-2
+```
+
+### 5) Piecewise saturating closure
+
+```bash
+python scripts/run_nonlinear.py \
+  --config experiments/diffinst.yaml \
+  --seed noise --closure piecewise \
+  --Sigma_sat_over_Sigma0 1.5
+```
+
+
+## Analysis utilities
+
+The recommended way to compare runs is via the lightweight analysis API:
+- Load manifests, metrics, checkpoints
+- Compute resolution-independent Fourier mode amplitudes at a target physical wavenumber
+- Compare native vs Dedalus runs for matched ICs
+
+Typical workflows:
+- EVP γ(k) vs linear TD amplitude growth
+- Noise runs: dominant k(t) vs fastest-growing EVP mode
+- Nonlinear: track max Σ(t), spike formation, and (with piecewise closure) saturation behavior
+
+## Notes / limitations (expected)
+- With pure power-law closures and sufficiently negative diffusion slope, the 1D nonlinear system can exhibit finite-time steepening / collapse into narrow spikes. This is a model behavior, not primarily a numerical failure.
+- Dust viscosity regularizes the linear small-scale behavior but does not generically provide nonlinear regularization against the dominant gradient-amplifying term in 1D.
+- The Dedalus backend is for cross-checks; the native solver is the primary “fast iteration” workhorse.
+
+## Citation
+
+If you use this code, please cite the associated paper and (optionally) the repository. A Zenodo DOI can be added once archived.
+
+
+
+## Still to discuss
 
 ### Core infrastructure
 
@@ -22,37 +229,9 @@ All runs are configured via YAML + a small set of CLI overrides.
   - `checkpoints/chk_****.npz` with `t, x, Sigma, vx, vy, uy`
 - ✅ **Tests**: basic unit tests pass (`pytest`)
 
-### Linear theory
-
-- ✅ **EVP (dispersion relation)**:
-  - Direct 4×4 eigenvalue problem implemented in `linear_ops.evp_solve_at_k`
-  - CLI sweep script (in `scripts/`) to scan over physical wavenumber `k` and tabulate growth rates
-- ✅ **Linear time-domain solver (native)**:
-  - IMEX pseudo-spectral integrator for the linearized system
-  - Uses the same grid and closures as the nonlinear solver (1D periodic Real FFT)
-- ✅ **Consistency checks**:
-  - Notebook / analysis helpers to compare:
-    - EVP growth rate `γ(k)`
-    - Linear TD amplitude evolution `|Σ_k(t)|`
-    - Nonlinear runs in the small-amplitude regime
 
 ### Nonlinear time-domain
 
-- ✅ **Native nonlinear solver** (`diffinst/solvers/native_nonlinear.py`):
-  - 1D pseudo-spectral IMEX with:
-    - Dust Σ, vx, vy
-    - Gas uy (axisymmetric closure, always present)
-  - Explicit part: advection + all variable-coefficient fluxes
-  - Implicit part: frozen Laplacian terms for dust/gas viscosity
-  - Writes standard `run.json` + metrics + checkpoints
-- ✅ **Initial condition options (native)**:
-  - `seed_mode="eigen"`: seed from EVP eigenvector at given `k_phys`
-  - `seed_mode="cos"`: simple cosine perturbation on Σ
-  - `seed_mode="noise"`: Σ = S₀ + Gaussian noise with controlled physical amplitude
-  - `--init-from path.npz`: load a precomputed IC (`Sigma, vx, vy, uy`) from disk
-  - Amplitudes:
-    - `--amp` + `--amp-physical` / fractional
-    - `--amp-metric=max|rms` for eigenmode normalization
 - ✅ **Grid override (native)**:
   - `Nx` can be overridden at run time via CLI (used to build a compatible `Grid1D` and operators)
   - Manifests / loaders respect the effective `Nx` used in a given run
@@ -67,23 +246,6 @@ All runs are configured via YAML + a small set of CLI overrides.
   - IC helpers: `save_ic_npz`, `load_ic_npz`
   - EVP helper: `evp_gamma(cfg, k_phys)`
 
-### Dedalus backend
-
-- ✅ **Dedalus nonlinear backend** (`diffinst/solvers/dedalus_backend.py`):
-  - 1D `RealFourier` domain in Dedalus (x only; y is a dummy coord)
-  - Implements the same dust–gas equations as the native solver
-  - Supports:
-    - Eigenmode seeding (EVP-based)
-    - Cosine seeding
-    - External IC from `.npz`
-  - Uses fixed RK443 timestep with user-supplied `dt`
-  - Writes checkpoints compatible with the analysis API and the native runs
-  - Logs progress and aborts cleanly on NaNs / Infs
-- ⚠️ **Current behavior**:
-  - Good agreement with native solver & EVP in the **linear / early nonlinear** regime
-  - At very large amplitudes, runs can still produce overflows / NaNs  
-    (we’ve experimented with floors and clamped closures but haven’t fully “hardened”
-    the high-amplitude regime yet)
 
 ### IC generation & eigenmode experiments
 
@@ -101,44 +263,6 @@ All runs are configured via YAML + a small set of CLI overrides.
 
 ---
 
-## What’s still to do
-
-### Nonlinear saturation / robustness
-
-- 🚧 **High-amplitude nonlinear regime**:
-  - Right now, once the mode becomes very large, both native and Dedalus can still hit:
-    - Large gradients in Σ, vx, vy
-    - Overflows inside nonlinear flux terms
-    - FFT warnings when spectra get extremely steep
-  - We’ve added:
-    - Hard floors on Σ inside the closures
-    - Optional clamping of Σ in the native stepper
-  - Still open:
-    - Decide on a principled regularization strategy (e.g. physical hyper-diffusion, slope limiting, or a stronger floor)
-    - Possibly use adaptive dt (CFL-style) in the native solver for very nonlinear runs
-    - Document the regime where the solver is “trusted” vs “formally unstable but informative”
-
-### Convergence & verification
-
-- 🚧 **Convergence harness**:
-  - Systematic scripts to:
-    - Sweep `Nx` and `dt` and compare:
-      - Growth rate vs EVP
-      - Mode shapes vs EVP eigenvectors
-      - Invariants (mass conservation)
-    - Compare native vs Dedalus integrators at matched parameters
-  - Add regression tests that:
-    - Check small-amplitude nonlinear runs reproduce linear growth rates
-    - Check mass conservation to a specified tolerance
-
-### Plotting / paper-figure layer
-
-- 🚧 **Paper-quality figure scripts**:
-  - High-level plotting routines for:
-    - `|Σ_k(t)|` for multiple runs on the same axes (linear TD vs nonlinear vs EVP)
-    - Σ(x,t) “waterfall” or stacked snapshots (already prototyped in notebooks)
-    - k-spectra from noise runs as a function of time
-    - Parameter sweeps (e.g. β_diff, D₀, ν₀) summarized across runs
   - Wrap the notebook snippets into **reusable functions** under a `figures/` or `scripts/fig_*.py` namespace
 
 ### Documentation / ergonomics
@@ -156,18 +280,3 @@ All runs are configured via YAML + a small set of CLI overrides.
     - “EVP sweep & compare to linear TD”
     - “Nonlinear eigenmode run from the same IC”
     - “Noise run: spectrum evolution & mode selection”
-
-- 🚧 **Dedalus environment docs**:
-  - Provide a short recipe for setting up a `dedalus3` conda env and installing this package there
-  - Clarify that Dedalus is **optional** and used mainly for cross-checks
-
----
-
-## Install (recommended: venv)
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -U pip
-pip install -e .  # editable install of this repo
-pip install scipy matplotlib pytest
