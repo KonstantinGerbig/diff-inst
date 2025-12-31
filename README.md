@@ -3,7 +3,7 @@
 
 # Diffusive Instabilities in Dusty Disks — numerical companion repo
 
-Fast, reproducible **1D axisymmetric** experiments for the diffusive instability in dusty disks, including an **incompressible, viscous gas** that responds **azimuthally** and couples to the dust via **drag backreaction**.
+Fast, reproducible **1D axisymmetric** experiments for the diffusive instability in dusty disks ([Gerbig et al. 2024](https://iopscience.iop.org/article/10.3847/1538-4357/ad1114), Gerbig & Lin, submitted), including an **incompressible, viscous gas** that responds **azimuthally** and couples to the dust via **drag backreaction**. 
 
 This repo supports the workflow used in the paper:
 
@@ -20,22 +20,22 @@ All runs are configured via **YAML** (+ a small set of CLI overrides). Every run
 
 ## What model is being solved?
 
-This code integrates the paper’s 1D axisymmetric dust–gas system (dust: `Σ, v_x, v_y`; gas: `u_y`), with periodic boundary conditions in `x`.
+This code integrates the paper’s 1D axisymmetric dust–gas system (dust: $\Sigma, v_x, v_y$; gas: $u_y$), with periodic boundary conditions in $x$.
 
-### Closure highlight (important)
+### Closure highlight
 
-The dust “pressure” is implemented via the closure
-
-\[
-c_d^2 = D/t_s,
-\]
-
-so the effective dust pressure inherits the same density dependence as the turbulent diffusivity \(D(\Sigma)\). This is a **closure choice** intended to represent unresolved velocity dispersion associated with turbulent mixing; it is not meant as a fundamental equation of state. The repo includes both pure power-law closures and a piecewise saturating closure used to eliminate nonlinear blow-up in 1D.
+The dust “pressure” is implemented via the closure 
+$$c_\text{s}^2 = \frac{D}{t_\text{s}}$$
+so the effective dust pressure inherits the same density dependence as the turbulent diffusivity 
+$$D(\Sigma) = \left(\frac{\Sigma}{\Sigma_0}\right)^{\beta_\text{diff}}.$$
+This is a **closure choice** intended to represent unresolved velocity dispersion associated with turbulent mixing; it is not meant as a fundamental equation of state. Roughly speaking, for small stopping times and for $\beta_\text{diff} < -2$, this pressure closure leads to diffusive instability. The repo includes both pure power-law closures and a piecewise saturating closure used to eliminate nonlinear blow-up in 1D.
 
 ---
 
-## Repo structure (high level)
 
+## Repo structure
+
+```bash
 diffinst/
   solvers/
     native_*                # pseudo-spectral IMEX solvers (linear + nonlinear)
@@ -46,24 +46,25 @@ diffinst/
   linear_ops.py             # EVP / dispersion relation utilities
   analysis_api.py           # run loading, metrics, mode amplitudes
   config.py                 # Config dataclass + YAML merge / validation
-  io.py                     # StreamWriter + run directory layout
-  io_utils.py
-  fields.py
-  grid.py
-  runtime.py
-  operators.py
-  nonlinear_terms.py
+  io_utils.py               # StreamWriter + run directory layout
+  fields.py                 # defines fields sigma, vx, vy, uy
+  grid.py                   # Fourier grid
+  runtime.py                # Run handling
+  operators.py              # Pseudospectral operators (fft, ifft, derivatives etc)
+  nonlinear_terms.py        # equations that are solved + closures
 
 defaults.yaml               # baseline parameters
-experiments/*.yaml          # paper-style configs
+experiments/*.yaml          # contains configs files
 scripts/                    # runnable entry points
+tests/                      # includes a few tests (WIP)
 notebooks/                  # jupyter notebooks
 figures/                    # figure outputs
 runs/                       # output (ignored by git)
+```
 
 ---
 
-## Output format (reproducibility)
+## Output format
 
 Each run creates a self-contained directory under `runs/`:
 
@@ -80,7 +81,7 @@ The analysis API can load and compare runs independent of resolution/backend.
 ### Linear theory (EVP)
 
 - 4×4 eigenvalue problem for the dispersion relation  
-- CLI sweeps over physical wavenumber `k` to obtain growth rates `γ(k)`  
+- CLI sweeps over physical wavenumber `k` to obtain growth rates `gamma(k)`  
 - EVP eigenvectors used to generate matched initial conditions for TD solvers  
 
 ### Linear time-domain (native)
@@ -99,7 +100,7 @@ The analysis API can load and compare runs independent of resolution/backend.
   - `seed_mode="noise"`
   - `--init-from path.npz` (load `Sigma, vx, vy, uy`)
 - Closure relations:
-  - Power-law closures `D, ν ∝ Σ^β`  
+  - Power-law closures $D, \nu \propto \Sigma^\beta$  
   - Piecewise saturating closure (negative slope active only over a finite density interval)  
 
 ### Dedalus backend (optional cross-check)
@@ -140,7 +141,7 @@ python scripts/run_evp.py \
   --kmin 10 --kmax 400 --nk 200
 ```
 
-Outputs growth rates γ(k) and (optionally) eigenvector information.
+Outputs growth rates $\gamma(k)$ and (optionally) eigenvector information.
 
 ### 2) Linear TD: validate EVP growth at a single k
 
@@ -151,7 +152,7 @@ python scripts/run_linear.py \
   --seed eigen
 ```
 
-Compare the measured mode amplitude growth to EVP’s γ(k).
+Compare the measured mode amplitude growth to EVP’s $\gamma(k)$.
 
 ### 3) Make initial condition
 
@@ -193,90 +194,53 @@ python scripts/run_nonlinear.py \
   --Sigma_sat_over_Sigma0 1.5
 ```
 
+---
 
 ## Analysis utilities
 
-The recommended way to compare runs is via the lightweight analysis API:
+The recommended way to compare runs is via the lightweight **Analysis API** (`diffinst/analysis_api.py`):
 - Load manifests, metrics, checkpoints
-- Compute resolution-independent Fourier mode amplitudes at a target physical wavenumber
-- Compare native vs Dedalus runs for matched ICs
-
-Typical workflows:
-- EVP γ(k) vs linear TD amplitude growth
-- Noise runs: dominant k(t) vs fastest-growing EVP mode
-- Nonlinear: track max Σ(t), spike formation, and (with piecewise closure) saturation behavior
-
-## Notes / limitations (expected)
-- With pure power-law closures and sufficiently negative diffusion slope, the 1D nonlinear system can exhibit finite-time steepening / collapse into narrow spikes. This is a model behavior, not primarily a numerical failure.
-- Dust viscosity regularizes the linear small-scale behavior but does not generically provide nonlinear regularization against the dominant gradient-amplifying term in 1D.
-- The Dedalus backend is for cross-checks; the native solver is the primary “fast iteration” workhorse.
-
-## Citation
-
-If you use this code, please cite the associated paper and (optionally) the repository. A Zenodo DOI can be added once archived.
-
-
-
-## Still to discuss
-
-### Core infrastructure
-
-- ✅ **Repo scaffolded**: `Config` dataclass → grid handling → streaming I/O (`StreamWriter`) → runners in `scripts/`
-- ✅ **Config system**: `defaults.yaml` + `experiments/*.yaml`, merged into an immutable `Config`
-- ✅ **Streaming I/O**:
-  - `run.json` manifest per run (stores config path, Nx, Lx, backend, dt, tstop,…)
-  - `metrics.jsonl` with time-series diagnostics (e.g. `mode1_amp`, `mass`)
-  - `checkpoints/chk_****.npz` with `t, x, Sigma, vx, vy, uy`
-- ✅ **Tests**: basic unit tests pass (`pytest`)
-
-
-### Nonlinear time-domain
-
-- ✅ **Grid override (native)**:
-  - `Nx` can be overridden at run time via CLI (used to build a compatible `Grid1D` and operators)
-  - Manifests / loaders respect the effective `Nx` used in a given run
-- ✅ **Analysis API** (`diffinst/analysis_api.py`):
   - `load_manifest`, `load_config_from_run`, `list_checkpoints`, `load_metrics`
   - `load_linear_run`, `load_linear_Sigma_series`
   - `load_nonlinear_run`, `load_nonlinear_Sigma_series`
-  - Resolution-independent mode amplitude helpers:
-    - `nearest_k_index(Lx, Nx, k_phys)`
-    - `amplitude_at_k_from_sigma` (returns physical cosine amplitude Aₖ)
-    - `load_linear_amplitude`, `load_nonlinear_amplitude`
-  - IC helpers: `save_ic_npz`, `load_ic_npz`
-  - EVP helper: `evp_gamma(cfg, k_phys)`
+- Compute resolution-independent Fourier mode amplitudes at a target physical wavenumber
+  - `nearest_k_index(Lx, Nx, k_phys)`
+  - `amplitude_at_k_from_sigma` (returns physical cosine amplitude Aₖ)
+  - `load_linear_amplitude`, `load_nonlinear_amplitude`
+- IC helpers: `save_ic_npz`, `load_ic_npz`
+- EVP helper: `evp_gamma(cfg, k_phys)`
 
+Example workflows:
+- EVP $\gamma(k)$ vs TD amplitude growth
+- Noise runs: dominant $k(t)$ vs fastest-growing EVP mode
+- Nonlinear: track max $\Sigma(t)$, spike formation, and (with piecewise closure) saturation behavior
 
-### IC generation & eigenmode experiments
+---
 
-- ✅ **Eigenmode IC generator** (helper script, called from notebook / CLI):
+## Overview of parameters
+
+**TBA**
+
+---
+
+## Additional notes and limitations
+
+- **Eigenmode IC generator** (helper script, called from notebook / CLI, see above):
   - Uses a chosen experiment config + `k_phys` + `Nx` override to:
     - Solve EVP
     - Build a real eigenmode in x
     - Normalize it to a desired physical `amp_phys` in Σ
     - Save to `runs/ic_k*_eigen.npz` with `Sigma, vx, vy, uy` and metadata
-  - This IC is then reused for:
-    - Linear TD runs (native)
-    - Nonlinear native runs
-    - Nonlinear Dedalus runs
-  - → “Equal ICs @ k = …” test: EVP vs linear TD vs nonlinear TD all consistent in growth regime
+  - This IC can be reused for any run
+- **Grid override**:
+  - `Nx` can be overridden at run time via CLI (used to build a compatible `Grid1D` and operators)
+  - Manifests / loaders respect the effective `Nx` used in a given run
+- With pure power-law closures and sufficiently negative diffusion slope, the 1D nonlinear system can exhibit finite-time steepening / collapse into narrow spikes. This is a model behavior, not primarily a numerical failure. This can be prevented by modifying the closure relation, such as the implemented piecwise closure.
+- Dust viscosity regularizes the linear small-scale behavior but does not generically provide nonlinear regularization against the dominant gradient-amplifying term in 1D.
+- The Dedalus backend is for cross-checks; the native solver is the primary “fast iteration” workhorse.
 
 ---
 
-  - Wrap the notebook snippets into **reusable functions** under a `figures/` or `scripts/fig_*.py` namespace
+## Citation
 
-### Documentation / ergonomics
-
-- 🚧 **CLI & config docs**:
-  - Document scripts such as:
-    - `scripts/run_linear.py`
-    - `scripts/run_nonlinear.py`
-    - IC generation helper
-  - Clearly separate:
-    - **Physical parameters**: stored in YAML (`experiments/*.yaml`, `defaults.yaml`)
-    - **Numerical parameters**: `Nx`, `dt`, `stop_time`, `save_stride`, `seed_mode`, etc.,
-      which can be overridden on the CLI
-  - Add small “recipes”:
-    - “EVP sweep & compare to linear TD”
-    - “Nonlinear eigenmode run from the same IC”
-    - “Noise run: spectrum evolution & mode selection”
+If you use this code, please cite the associated paper and (optionally) the repository. A Zenodo DOI can be added once archived.
