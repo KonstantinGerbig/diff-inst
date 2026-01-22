@@ -223,6 +223,12 @@ Example workflows:
 
 ---
 
+## Pytests
+
+**TBA** (need to update tests as well)
+
+---
+
 ## Additional notes and limitations
 
 - **Eigenmode IC generator** (helper script, called from notebook / CLI, see above):
@@ -243,4 +249,4 @@ Example workflows:
 
 ## Citation
 
-If you use this code, please cite the associated paper and (optionally) the repository. A Zenodo DOI can be added once archived.
+If you use this code, please cite the associated paper and (optionally) the repository.
