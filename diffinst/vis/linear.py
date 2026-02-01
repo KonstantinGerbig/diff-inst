@@ -427,7 +427,7 @@ def plot_diffusion_slope_family(
 
     
 
-    axL.axvline(100, color = "black", lw = 1, ls = "--", label = r"$k = 100$")
+    axL.axvline(100, color = "black", lw = 1, ls = "--", label = r"$K = 100$")
 
     # ---- left panel: γ(k) via EVP ----
     for i, key in enumerate(keys):
@@ -454,8 +454,8 @@ def plot_diffusion_slope_family(
     axL.set(ylim = (1e-4,1), xlim = (ks[0], ks[-1]))
     axL.set_xscale("log")
     axL.set_yscale("log")
-    axL.set_xlabel(r"$k$")
-    axL.set_ylabel(r"$\gamma(k)$")
+    axL.set_xlabel(r"$K$")
+    axL.set_ylabel(r"$\gamma(K)$")
     axL.legend(frameon=False, loc = "upper left")
 
     # ---- right panel: nonlinear IVP amplitude + EVP prediction at k_phys ----

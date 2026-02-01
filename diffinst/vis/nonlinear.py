@@ -783,12 +783,12 @@ def plot_noise_dominant_mode_vs_theory(
     )
     ax.axhline(
         k_max, color="k", ls="--", lw=1.5,
-        label=rf"EVP $k_\mathrm{{max}}\approx {k_max:.1f}$",
+        label=rf"EVP $K_\mathrm{{max}}\approx {k_max:.1f}$",
     )
 
     ax.set_yscale("log")
     ax.set_xlabel(r"$t[\Omega^{-1}]$")
-    ax.set_ylabel(r"$k_\mathrm{dom}(t)$")
+    ax.set_ylabel(r"$K_\mathrm{dom}(t)$")
     ax.set_xlim(T_lo[0], T_lo[-1])
     ax.legend(frameon=False, fontsize=10, loc="upper right")
 
@@ -804,8 +804,8 @@ def plot_noise_dominant_mode_vs_theory(
     ax_in.axvline(k_max, color="k", ls="--", lw=1.0)
     ax_in.set_xscale("log")
     ax_in.set_yscale("log")
-    ax_in.set_xlabel(r"$k$", fontsize=8)
-    ax_in.set_ylabel(r"$\gamma(k)$", fontsize=8)
+    ax_in.set_xlabel(r"$K$", fontsize=8)
+    ax_in.set_ylabel(r"$\gamma(K)$", fontsize=8)
     ax_in.tick_params(labelsize=7)
 
     fig.tight_layout()
