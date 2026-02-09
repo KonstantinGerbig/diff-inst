@@ -36,7 +36,7 @@ This is a **closure choice** intended to represent unresolved velocity dispersio
 ## Repo structure
 
 ```bash
-diffinst/
+src/diffinst/
   solvers/
     native_*                # pseudo-spectral IMEX solvers (linear + nonlinear)
     dedalus_backend.py      # optional Dedalus implementation
@@ -217,9 +217,38 @@ Example workflows:
 
 ---
 
-## Overview of parameters
+## Code units and parameters
 
-**TBA**
+The code uses dimensionless units where orbital frequency and characteristic scale height are set to $\Omega = 1$ and $H=1$ respectively. The background dust surface density is set to $\Sigma_0 = 1$. All parameters can be edited via yaml configuration files. Physical parameters are
+- `D_0`: (unperturbed) diffusion coefficient
+- `beta_diff`: diffusion slope ($D = D_0 (\Sigma/\Sigma_0)^{\beta_\mathrm{diff}}$ for the standard closure)
+- `nu_0` and `beta_visc`: (unperturbed) dust viscosity coefficient and viscosity slope ($\nu = \nu_0 (\Sigma/\Sigma_0)^{\beta_\mathrm{visc}}$)
+- `ts`: dust stopping time
+- `q`: shear parameter
+
+The model also includes an incompressible gas:
+- `eps`: dust-to-gas ratio
+- `nu_g`: constant gas viscosity
+- `enable_gas`: toggles inclusion of the gas equation. If `enable_gas: false`, the model assumes drag against a static background. 
+
+The grid is also set up via the yaml file:
+- `Nx`: number of grid cells
+- `Lx`: domain size in code units
+
+For eigenvalue tests, it is useful that the domain size is an exact multiple of the target wavelength. To avoid having to calculate the correct Lx by hand, this can be asserted in the yaml:
+- `exact_fit: enable`: flag to force an exact fit to the given wavenumber, overrides any set `Lx`
+- `exact_fit: K_target`: target wavenumber. Note, that this only sets up the grid. It does not set the initial condition.  
+- `exact_fit: harmonics`: number of wavelengths to fit into the domain
+
+Run control parameters:
+- `stop_time`
+- `max_dt`: max time step
+- `min_dt`: min time step
+- `save_stride`
+- `log_stride`
+- `solver: backend`: options include `native` and `dedalus`
+
+Note that grid and runtime parameters are ignored when the code is in evp mode. 
 
 ---
 
