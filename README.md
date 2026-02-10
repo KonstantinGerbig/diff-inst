@@ -159,9 +159,10 @@ python -m scripts.make_ic_eigen \
 
 ```bash
 python scripts/run_linear.py \
-  --config experiments/diffinst.yaml \
-  --k 100 --Nx 256 --dt 1e-3 --tstop 5.0 \
-  --init-from runs/ic_eigen.npz
+  --config experiments/diffinst.yaml --mode linear \
+  --k 100 --dt 1e-3 --stop-time 5.0 \
+  --init-from runs/ic_eigen.npz \
+  --outdir runs/linear
 ```
 
 Compare the measured mode amplitude growth to EVP’s $\gamma(k)$.
@@ -171,9 +172,10 @@ Compare the measured mode amplitude growth to EVP’s $\gamma(k)$.
 
 ```bash
 python scripts/run_nonlinear.py \
-  --config experiments/diffinst.yaml \
-  --k 100 --Nx 256 --dt 1e-3 --tstop 5.0 \
-  --init-from runs/ic_eigen.npz
+  --config experiments/diffinst.yaml --mode nonlinear \
+  --k 100 --Nx 256 --dt 1e-3 --stop-time 5.0 \
+  --init-from runs/ic_eigen.npz \
+  --outdir runs/nonlinear
 ```
 
 
@@ -181,18 +183,9 @@ python scripts/run_nonlinear.py \
 
 ```bash
 python scripts/run_nonlinear.py \
-  --config experiments/diffinst.yaml \
-  --seed noise --Nx 512 --dt 5e-4 --tstop 5.0 \
-  --noise-amp 1e-2
-```
-
-### 5) Piecewise saturating closure
-
-```bash
-python scripts/run_nonlinear.py \
-  --config experiments/diffinst_noise_piecewise.yaml \
-  --seed noise --closure piecewise \
-  --Sigma_sat_over_Sigma0 1.5
+  --config experiments/diffinst.yaml --mode nonlinear\
+  --seed-mode noise --Nx 512 --dt 5e-4 --stop-time 2.0 \
+  --outdir runs/noise
 ```
 
 ---
