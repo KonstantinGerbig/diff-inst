@@ -131,7 +131,7 @@ Dedalus is optional and used for cross-checks only. If you want it, set up a ded
 
 ## Running experiments via Scripts
 
-Exact script names may vary slightly; the pattern is: pick an experiments/*.yaml and override numerics (Nx, dt, tstop, backend, seed) on the CLI.
+The code base includes serveral useful scripts for solving eigen value problem and running time domain setups. The general pattern is: pick an experiments/*.yaml and override numerics (Nx, dt, tstop, backend, seed) on the CLI. Scripts can be run from the command line (see examples below) or from notebooks (see the jupyter notebooks in the notebook folder).
 
 ### 1) EVP sweep: growth rate vs wavenumber
 
@@ -143,27 +143,28 @@ python scripts/run_evp.py \
 
 Outputs growth rates $\gamma(k)$ and (optionally) eigenvector information.
 
-### 2) Linear TD: validate EVP growth at a single k
+### 2) Make eigenvalue initial condition
+
+```bash
+python -m scripts.make_ic_eigen \
+  --config experiments/diffinst.yaml \
+  --k 100.0 \
+  --amp 1e-6 \
+  --Nx 256 \
+  --exact-fit-harm 2 \
+  --out runs/ic_eigen.npz
+```
+
+### 3) Linear TD: validate EVP growth at a single k
 
 ```bash
 python scripts/run_linear.py \
   --config experiments/diffinst.yaml \
-  --k 100 --Nx 128 --dt 1e-3 --tstop 5.0 \
-  --seed eigen
+  --k 100 --Nx 256 --dt 1e-3 --tstop 5.0 \
+  --init-from runs/ic_eigen.npz
 ```
 
 Compare the measured mode amplitude growth to EVP’s $\gamma(k)$.
-
-### 3) Make initial condition
-
-```bash
-python -m scripts.make_ic_eigen \
-  --config experiments/unstable_baseline.yaml \
-  --k 100.0 \
-  --amp 1e-6 \
-  --Nx 256 \
-  --exact-fit-harm 2
-```
 
 
 ### 3) Nonlinear eigenmode run
@@ -171,8 +172,8 @@ python -m scripts.make_ic_eigen \
 ```bash
 python scripts/run_nonlinear.py \
   --config experiments/diffinst.yaml \
-  --k 100 --Nx 128 --dt 1e-3 --tstop 5.0 \
-  --seed eigen --amp 0.1
+  --k 100 --Nx 256 --dt 1e-3 --tstop 5.0 \
+  --init-from runs/ic_eigen.npz
 ```
 
 
@@ -189,7 +190,7 @@ python scripts/run_nonlinear.py \
 
 ```bash
 python scripts/run_nonlinear.py \
-  --config experiments/diffinst.yaml \
+  --config experiments/diffinst_noise_piecewise.yaml \
   --seed noise --closure piecewise \
   --Sigma_sat_over_Sigma0 1.5
 ```
@@ -254,7 +255,7 @@ Note that grid and runtime parameters are ignored when the code is in evp mode.
 
 ## Pytests
 
-**TBA** (need to update tests as well)
+
 
 ---
 
