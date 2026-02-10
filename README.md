@@ -3,6 +3,8 @@
 
 # Diffusive Instabilities in Dusty Disks — numerical companion repo
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18602622.svg)](https://doi.org/10.5281/zenodo.18602622)
+
 Fast, reproducible **1D axisymmetric** experiments for the diffusive instability in dusty disks ([Gerbig et al. 2024](https://iopscience.iop.org/article/10.3847/1538-4357/ad1114), Gerbig & Lin, submitted), including an **incompressible, viscous gas** that responds **azimuthally** and couples to the dust via **drag backreaction**. 
 
 This repo supports the workflow used in the paper:
@@ -272,4 +274,8 @@ Run from root via `pytest`. Currently only includes a few dry tests. Future vers
 
 ## Citation
 
-If you use this code, please cite the associated paper and (optionally) the repository.
+If you use this code, please cite the associated paper. If you use the software itself (or want to reference a specific version), please cite the Zenodo archive:
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18602622.svg)](https://doi.org/10.5281/zenodo.18602622)
+
+A `CITATION.cff` file is also included in the repository, and GitHub provides formatted citations via the **“Cite this repository”** button.
