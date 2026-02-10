@@ -248,7 +248,7 @@ Note that grid and runtime parameters are ignored when the code is in evp mode.
 
 ## Pytests
 
-
+Run from root via `pytest -q`. Currently only includes a few dry tests. Future versions might include more tests.
 
 ---
 
