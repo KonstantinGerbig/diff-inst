@@ -274,7 +274,7 @@ Run from root via `pytest`. Currently only includes a few dry tests. Future vers
 
 ## Citation
 
-If you use this code, please cite the associated paper. If you use the software itself (or want to reference a specific version), please cite the Zenodo archive:
+If you use this code, please cite the associated paper ([Gerbig & Lin (2026), ArXiv preprint](https://arxiv.org/abs/2602.16043)). If you use the software itself (or want to reference a specific version), please cite the Zenodo archive:
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18602622.svg)](https://doi.org/10.5281/zenodo.18602622)
 
