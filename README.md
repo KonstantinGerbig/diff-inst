@@ -5,7 +5,7 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18602622.svg)](https://doi.org/10.5281/zenodo.18602622)
 
-Fast, reproducible **1D axisymmetric** experiments for the diffusive instability in dusty disks ([Gerbig et al. 2024](https://iopscience.iop.org/article/10.3847/1538-4357/ad1114), Gerbig & Lin, submitted), including an **incompressible, viscous gas** that responds **azimuthally** and couples to the dust via **drag backreaction**. 
+Fast, reproducible **1D axisymmetric** experiments for the diffusive instability in dusty disks ([Gerbig & Lin (2026)](https://iopscience.iop.org/article/10.3847/1538-4357/ae47fb), [Gerbig et al. 2024](https://iopscience.iop.org/article/10.3847/1538-4357/ad1114)), including an **incompressible, viscous gas** that responds **azimuthally** and couples to the dust via **drag backreaction**. 
 
 This repo supports the workflow used in the paper:
 
@@ -274,7 +274,7 @@ Run from root via `pytest`. Currently only includes a few dry tests. Future vers
 
 ## Citation
 
-If you use this code, please cite the associated paper ([Gerbig & Lin (2026), ArXiv preprint](https://arxiv.org/abs/2602.16043)). If you use the software itself (or want to reference a specific version), please cite the Zenodo archive:
+If you use this code, please cite the associated paper ([Gerbig & Lin (2026)](https://iopscience.iop.org/article/10.3847/1538-4357/ae47fb)). If you use the software itself (or want to reference a specific version), please cite the Zenodo archive:
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18602622.svg)](https://doi.org/10.5281/zenodo.18602622)
 
